@@ -116,7 +116,7 @@ function SelectingDock({
                 {t('Add player')}
             </Button>
 
-            <div className="ml-auto flex items-center gap-2">
+            <div className="ml-auto flex min-w-0 flex-wrap items-center justify-end gap-2">
                 <Button
                     type="button"
                     variant="ghost"
@@ -155,7 +155,7 @@ function ComparingDock({
                     : t('Comparing :count players', { count: playerCount })}
             </span>
 
-            <div className="ml-auto flex items-center gap-2">
+            <div className="ml-auto flex min-w-0 flex-wrap items-center justify-end gap-2">
                 {canAddMore && (
                     <Button
                         type="button"

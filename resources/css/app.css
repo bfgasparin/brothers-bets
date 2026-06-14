@@ -154,6 +154,11 @@
        `.has-pool-tab-bar`/`.has-floating-nav` raise them, but only under the mobile media query. */
     --pool-tab-bar-h: 0px;
     --top-nav-h: 0px;
+
+    /* Floating mobile chrome (top-nav buttons + bottom tab bars). A frosted-glass pill: a translucent
+       --card fill that frosts the content behind it, lifted off cards/tables by a green accent ring. */
+    --nav-surface: color-mix(in srgb, var(--card) 72%, transparent);
+    --nav-ring: color-mix(in oklch, var(--primary) 34%, transparent);
 }
 
 .dark {
@@ -200,6 +205,11 @@
     --glow-accent: 0 18px 40px -10px rgba(255, 198, 69, 0.45);
     --glow-teal: 0 18px 44px -12px rgba(76, 198, 218, 0.45);
     --glow-violet: 0 18px 44px -12px rgba(154, 140, 255, 0.45);
+
+    /* Floating mobile chrome — translucent dark-card glass + a slightly stronger green ring so it
+       still separates from the dark cards/tables behind it (card is #13201a). */
+    --nav-surface: color-mix(in srgb, var(--card) 66%, transparent);
+    --nav-ring: color-mix(in oklch, var(--primary) 45%, transparent);
 }
 
 @layer base {
@@ -402,6 +412,27 @@
         box-shadow: var(--sh-sm);
     }
 
+    /* Frosted-glass surface for the floating mobile chrome (top-nav buttons + bottom tab bars). A
+       translucent --card fill + backdrop blur/saturate frosts the content behind it; the green ring
+       lifts it off the cards/tables it floats over (same trick in both themes). Call sites keep their
+       own shadow (--sh-lg bars / --sh-md buttons). The -webkit- prefix is required for iOS Safari. */
+    .floating-nav-surface {
+        background-color: var(--nav-surface);
+        border: 1px solid var(--nav-ring);
+        -webkit-backdrop-filter: blur(14px) saturate(1.5);
+        backdrop-filter: blur(14px) saturate(1.5);
+    }
+
+    /* Edge-to-edge frosted top app bar — same frosted tokens as .floating-nav-surface, but shaped as
+       a full-width bar (bottom hairline instead of a full ring, no rounding) so the top controls sit
+       on one continuous surface instead of camouflaging as detached chips. -webkit- prefix for iOS. */
+    .floating-top-bar {
+        background-color: var(--nav-surface);
+        border-bottom: 1px solid var(--nav-ring);
+        -webkit-backdrop-filter: blur(14px) saturate(1.5);
+        backdrop-filter: blur(14px) saturate(1.5);
+    }
+
     /* The mobile floating-nav footprints — only under the mobile breakpoint, so desktop keeps the
        tokens at 0 (no reserved padding, every offset collapses flush). `.has-pool-tab-bar` covers the
        floating bottom tab pill (in-pool); `.has-floating-nav` covers the floating top switcher/avatar
@@ -414,7 +445,7 @@
         }
 
         .has-floating-nav {
-            --top-nav-h: calc(3.25rem + env(safe-area-inset-top, 0px));
+            --top-nav-h: calc(3.5rem + env(safe-area-inset-top, 0px));
         }
     }
 

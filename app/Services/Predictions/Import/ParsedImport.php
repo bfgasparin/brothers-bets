@@ -75,4 +75,31 @@ final class ParsedImport
 
         return $rows;
     }
+
+    /**
+     * Knockout rows carrying the JSON's OWN authored participants (not a derived slot), for an
+     * "import the bracket as authored" upfront commit: the team the author typed in each spot plus
+     * the score and "advances" pick. Resolved team ids may be null where a code matched no team.
+     *
+     * @return list<array{fixture_id: int, predicted_home_team_id: int|null, predicted_away_team_id: int|null, home_goals: int|null, away_goals: int|null, advancing_pick: int|null}>
+     */
+    public function literalKnockoutRows(): array
+    {
+        $rows = [];
+
+        foreach ($this->matches as $match) {
+            if ($match->isKnockout && $match->fixtureId !== null) {
+                $rows[] = [
+                    'fixture_id' => $match->fixtureId,
+                    'predicted_home_team_id' => $match->homeTeamId,
+                    'predicted_away_team_id' => $match->awayTeamId,
+                    'home_goals' => $match->homeGoals,
+                    'away_goals' => $match->awayGoals,
+                    'advancing_pick' => $match->advancesTeamId,
+                ];
+            }
+        }
+
+        return $rows;
+    }
 }

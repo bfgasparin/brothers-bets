@@ -26,6 +26,14 @@ class EntryImportController extends Controller
 {
     public function create(Tournament $tournament): Response
     {
+        // Users whose entry in any of this tournament's pools was backfilled "as authored" — so the
+        // picker can badge whose accounts had the group-classification problem.
+        $authoredUserIds = Entry::query()
+            ->whereIn('pool_id', $tournament->pools()->select('id'))
+            ->whereNotNull('authored_bracket_at')
+            ->pluck('user_id')
+            ->flip();
+
         return Inertia::render('manage/backfill', [
             'tournament' => $this->tournamentIdentity($tournament),
             'pools' => $tournament->pools()->orderBy('name')->get()
@@ -37,6 +45,7 @@ class EntryImportController extends Controller
                     'name' => $user->name,
                     'email' => $user->email,
                     'avatar' => $user->avatar,
+                    'has_authored_import' => $authoredUserIds->has($user->id),
                 ])
                 ->all(),
         ]);
@@ -54,9 +63,11 @@ class EntryImportController extends Controller
             'tournament' => $this->tournamentIdentity($tournament),
             'pool' => $this->poolIdentity($pool),
             'user' => ['id' => $user->id, 'name' => $user->name, 'email' => $user->email],
-            'preview' => $importer->preview($entry, $parsed),
+            'preview' => $importer->preview($entry, $parsed, $request->literal()),
             'thirds_team_ids' => $parsed->thirdsTeamIds,
             'group_standings_team_ids' => $parsed->groupStandings,
+            // The raw blob, so the review screen can re-preview in the other bracket mode without a re-paste.
+            'json' => $request->input('json'),
         ]);
     }
 

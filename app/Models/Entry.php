@@ -27,7 +27,17 @@ class Entry extends Model
             'total_points' => 'integer',
             'rank' => 'integer',
             'previous_rank' => 'integer',
+            'authored_bracket_at' => 'datetime',
         ];
+    }
+
+    /**
+     * Whether this entry's knockout bracket was backfilled "as authored" from a JSON blob and must
+     * therefore never be re-derived from the group scores (the prediction page is blocked for it).
+     */
+    public function hasAuthoredBracket(): bool
+    {
+        return $this->authored_bracket_at !== null;
     }
 
     /**

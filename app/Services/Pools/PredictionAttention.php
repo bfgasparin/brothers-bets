@@ -84,6 +84,12 @@ class PredictionAttention
             return new AttentionSummary(false);
         }
 
+        // An organizer-authored bracket is finished and uneditable, so it never wants attention —
+        // don't nag the player to "finish" picks they can't open.
+        if ($entry->hasAuthoredBracket()) {
+            return new AttentionSummary(false);
+        }
+
         return $pool->usesPhasedPredictionWindows()
             ? $this->phasedSummary($pool, $entry)
             : $this->upfrontSummary($pool, $entry);

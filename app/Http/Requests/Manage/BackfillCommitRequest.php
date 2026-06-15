@@ -40,11 +40,17 @@ class BackfillCommitRequest extends FormRequest
             'group.*.home_goals' => ['required', 'integer', 'min:0', 'max:99'],
             'group.*.away_goals' => ['required', 'integer', 'min:0', 'max:99'],
 
+            // Store the JSON's authored knockout bracket verbatim (upfront only) instead of deriving it.
+            'literal' => ['sometimes', 'boolean'],
+
             'knockout' => ['present', 'array'],
             'knockout.*.fixture_id' => ['required', 'integer', Rule::in($knockoutIds)],
             'knockout.*.home_goals' => ['nullable', 'integer', 'min:0', 'max:99'],
             'knockout.*.away_goals' => ['nullable', 'integer', 'min:0', 'max:99'],
             'knockout.*.advancing_team_id' => ['nullable', 'integer'],
+            // The JSON's authored participants, sent only in authored mode (see `literal`).
+            'knockout.*.predicted_home_team_id' => ['nullable', 'integer', Rule::exists('teams', 'id')],
+            'knockout.*.predicted_away_team_id' => ['nullable', 'integer', Rule::exists('teams', 'id')],
 
             'thirds_team_ids' => ['present', 'array'],
             'thirds_team_ids.*' => ['integer'],
@@ -69,6 +75,8 @@ class BackfillCommitRequest extends FormRequest
             'home_goals' => $this->intOrNull($row['home_goals'] ?? null),
             'away_goals' => $this->intOrNull($row['away_goals'] ?? null),
             'advancing_pick' => $this->intOrNull($row['advancing_team_id'] ?? null),
+            'predicted_home_team_id' => $this->intOrNull($row['predicted_home_team_id'] ?? null),
+            'predicted_away_team_id' => $this->intOrNull($row['predicted_away_team_id'] ?? null),
         ], $this->validated('knockout'));
 
         $thirds = array_map('intval', $this->validated('thirds_team_ids', []));
@@ -78,7 +86,7 @@ class BackfillCommitRequest extends FormRequest
             $this->validated('group_standings_team_ids', []),
         );
 
-        return new CorrectedImport($group, $knockout, $thirds, $groupStandings);
+        return new CorrectedImport($group, $knockout, $thirds, $groupStandings, $this->boolean('literal'));
     }
 
     public function tournament(): Tournament

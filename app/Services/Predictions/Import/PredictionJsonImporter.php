@@ -180,16 +180,21 @@ class PredictionJsonImporter
      *
      * @return array<string, mixed>
      */
-    public function preview(Entry $entry, ParsedImport $parsed): array
+    public function preview(Entry $entry, ParsedImport $parsed, bool $literal = false): array
     {
         DB::beginTransaction();
 
         try {
             $alreadyPopulated = $this->hasExistingPredictions($entry);
 
-            $this->applyToSandbox($entry, $parsed->groupRows(), $parsed->knockoutRows(), $parsed->thirdsTeamIds, $parsed->groupStandings);
+            // Authored mode (upfront only) stores the JSON's own knockout participants verbatim; the
+            // derived-bracket rows would discard them. Phased pools have no derivation to bypass.
+            $literal = $literal && $entry->pool->predictsKnockoutBracket();
+            $knockoutRows = $literal ? $parsed->literalKnockoutRows() : $parsed->knockoutRows();
 
-            return $this->buildPreviewPayload($entry, $parsed, $alreadyPopulated);
+            $this->applyToSandbox($entry, $parsed->groupRows(), $knockoutRows, $parsed->thirdsTeamIds, $parsed->groupStandings, $literal);
+
+            return $this->buildPreviewPayload($entry, $parsed, $alreadyPopulated, $literal);
         } finally {
             // Always discard the sandbox: the preview must store nothing. Nested persist()
             // transactions are savepoints, so this rollback unwinds them too.
@@ -203,8 +208,16 @@ class PredictionJsonImporter
      */
     public function commit(Entry $entry, CorrectedImport $corrected): void
     {
-        DB::transaction(function () use ($entry, $corrected): void {
-            $this->applyToSandbox($entry, $corrected->groupRows, $corrected->knockoutRows, $corrected->thirdsTeamIds, $corrected->groupStandings);
+        // Authored mode applies only to upfront pools (a phased pool has no derivation to bypass).
+        $literal = $corrected->literal && $entry->pool->predictsKnockoutBracket();
+
+        DB::transaction(function () use ($entry, $corrected, $literal): void {
+            $this->applyToSandbox($entry, $corrected->groupRows, $corrected->knockoutRows, $corrected->thirdsTeamIds, $corrected->groupStandings, $literal);
+
+            // Mark (authored mode) or clear (derive mode) the bracket so the prediction page never
+            // re-derives an as-authored entry; a later derive-mode commit restores normal behaviour.
+            $entry->authored_bracket_at = $literal ? now() : null;
+            $entry->save();
         });
 
         // Kept outside the write transaction, mirroring ApproveScoreBatch: each manages its own.
@@ -218,11 +231,13 @@ class PredictionJsonImporter
      * the group scores (tie ordering + cascade); phased pools predict the official match-ups directly.
      *
      * @param  list<array{fixture_id: int, home_goals: int, away_goals: int}>  $groupRows
-     * @param  list<array{fixture_id: int, home_goals: int|null, away_goals: int|null, advancing_pick: int|null}>  $knockoutRows
+     * @param  list<array{fixture_id: int, home_goals: int|null, away_goals: int|null, advancing_pick: int|null, predicted_home_team_id?: int|null, predicted_away_team_id?: int|null}>  $knockoutRows
      * @param  list<int>  $thirdsTeamIds
      * @param  array<string, list<int>>  $groupStandings  uppercased group label => stated finishing order
+     * @param  bool  $literal  upfront only — store the JSON's authored knockout bracket verbatim instead
+     *                         of deriving it from the group scores
      */
-    private function applyToSandbox(Entry $entry, array $groupRows, array $knockoutRows, array $thirdsTeamIds, array $groupStandings = []): void
+    private function applyToSandbox(Entry $entry, array $groupRows, array $knockoutRows, array $thirdsTeamIds, array $groupStandings = [], bool $literal = false): void
     {
         $this->writeGroupPredictions($entry, $groupRows);
 
@@ -230,6 +245,15 @@ class PredictionJsonImporter
             // Phased: the bracket is the official one (projected from real results); predict the real
             // match-ups directly. No tie ordering, no third-place cut, no cascade.
             $this->writePhasedKnockoutPredictions($entry, $knockoutRows);
+
+            return;
+        }
+
+        if ($literal) {
+            // Authored mode: the JSON author placed the knockout participants themselves (their group
+            // classification didn't follow FIFA rules). Store that bracket verbatim — no tie ordering,
+            // no third-place cut, no cascade — so the player is scored on exactly what they submitted.
+            $this->writeLiteralUpfrontKnockoutPredictions($entry, $knockoutRows);
 
             return;
         }
@@ -305,6 +329,39 @@ class PredictionJsonImporter
                     ),
                 ],
             );
+        }
+    }
+
+    /**
+     * Authored mode (upfront): store the JSON's own knockout participants verbatim. The bracket is NOT
+     * derived from the group scores, so we write `predicted_home/away` straight from what the author
+     * typed, and derive the advancing team from the score against THOSE teams ({@see advancingFor} —
+     * the higher-scoring side decisively, the "advances" pick only on a draw). Existing knockout rows
+     * are cleared first so a re-import (overwrite) leaves exactly the authored bracket, with no stale
+     * derived slots for fixtures the blob omitted.
+     *
+     * @param  list<array{fixture_id: int, predicted_home_team_id: int|null, predicted_away_team_id: int|null, home_goals: int|null, away_goals: int|null, advancing_pick: int|null}>  $rows
+     */
+    private function writeLiteralUpfrontKnockoutPredictions(Entry $entry, array $rows): void
+    {
+        $entry->knockoutPredictions()->delete();
+
+        foreach ($rows as $row) {
+            KnockoutPrediction::create([
+                'entry_id' => $entry->id,
+                'fixture_id' => $row['fixture_id'],
+                'predicted_home_team_id' => $row['predicted_home_team_id'] ?? null,
+                'predicted_away_team_id' => $row['predicted_away_team_id'] ?? null,
+                'home_goals' => $row['home_goals'],
+                'away_goals' => $row['away_goals'],
+                'advancing_team_id' => $this->advancingFor(
+                    $row['home_goals'],
+                    $row['away_goals'],
+                    $row['predicted_home_team_id'] ?? null,
+                    $row['predicted_away_team_id'] ?? null,
+                    $row['advancing_pick'] ?? null,
+                ),
+            ]);
         }
     }
 
@@ -429,7 +486,7 @@ class PredictionJsonImporter
     /**
      * @return array<string, mixed>
      */
-    private function buildPreviewPayload(Entry $entry, ParsedImport $parsed, bool $alreadyPopulated): array
+    private function buildPreviewPayload(Entry $entry, ParsedImport $parsed, bool $alreadyPopulated, bool $literal = false): array
     {
         $tournament = $entry->pool->tournament;
         $fixtures = $tournament->fixtures()->with('phase')->get()->keyBy('id');
@@ -437,8 +494,10 @@ class PredictionJsonImporter
         $knockoutRows = $entry->knockoutPredictions()->get()->keyBy('fixture_id');
 
         // Only upfront pools derive the bracket from the group scores; the third-place cut, the
-        // within-group ties, and the positional advancing salvage all hang off that derivation.
+        // within-group ties, and the positional advancing salvage all hang off that derivation. In
+        // authored mode the bracket is the JSON's own, so none of those derivation artefacts apply.
         $derivesBracket = $entry->pool->predictsKnockoutBracket();
+        $showsDerivation = $derivesBracket && ! $literal;
 
         $matches = $parsed->matches;
         usort($matches, fn (ParsedMatch $a, ParsedMatch $b): int => $a->matchNumber <=> $b->matchNumber);
@@ -453,24 +512,25 @@ class PredictionJsonImporter
 
             $fixture = $fixtures->get($match->fixtureId);
             $row = $match->isKnockout
-                ? $this->knockoutRow($match, $fixture, $knockoutRows->get($match->fixtureId), $teams, $derivesBracket)
+                ? $this->knockoutRow($match, $fixture, $knockoutRows->get($match->fixtureId), $teams, $showsDerivation)
                 : $this->groupRow($match, $fixture, $teams);
 
             $hasRowError = $hasRowError || $row['severity'] === 'error';
             $rows[] = $row;
         }
 
-        // A phased pool predicts the official match-ups, so there is nothing derived to compare the
-        // JSON third-place ordering against.
-        $derivedThirds = $derivesBracket
+        // A phased pool predicts the official match-ups, and authored mode keeps the JSON's own
+        // bracket, so in neither case is there a derived third-place ranking to compare against.
+        $derivedThirds = $showsDerivation
             ? ($this->resolver->resolve($entry)->rankedThirds ?? [])
             : [];
         $jsonThirds = array_slice($parsed->thirdsTeamIds, 0, count($derivedThirds));
         $thirdsMismatch = $derivedThirds !== [] && $parsed->thirdsTeamIds !== []
             && array_diff($derivedThirds, $jsonThirds) !== [];
 
-        // Only upfront pools derive group standings, so only they can carry a within-group tie.
-        $groupTies = $derivesBracket
+        // Only a derived upfront bracket carries within-group ties to report; authored mode bypasses
+        // the derivation entirely.
+        $groupTies = $showsDerivation
             ? $this->groupTiesReport($entry, $parsed, $teams)
             : [];
 
@@ -503,6 +563,12 @@ class PredictionJsonImporter
             ],
             'group_ties' => $groupTies,
             'has_errors' => $hasErrors,
+            // Whether this preview reflects the JSON's bracket stored verbatim (authored mode) rather
+            // than the FIFA-derived one — drives the review screen's mode banner and commit payload.
+            'literal' => $literal,
+            // Whether authored mode is applicable at all — only upfront pools derive a bracket to
+            // override. Gates the "Import the bracket as authored" offer on the review screen.
+            'can_author' => $derivesBracket,
         ];
     }
 

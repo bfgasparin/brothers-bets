@@ -9,6 +9,7 @@ use App\Models\Team;
 use App\Models\Tournament;
 use App\Models\User;
 use App\Notifications\PredictionsOverwrittenNotification;
+use App\Services\Predictions\BracketResolver;
 use Database\Seeders\WorldCup2026Seeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Collection;
@@ -83,6 +84,9 @@ class EntryImportControllerTest extends TestCase
                 ->where('preview.has_errors', false)
                 ->where('user.id', $user->id)
                 ->has('preview.rows')
+                // The upfront pool derives a bracket, so authored mode is on offer (gates the
+                // "Import the bracket as authored" button on the review screen).
+                ->where('preview.can_author', true)
             );
 
         $this->assertDatabaseHas('entries', ['pool_id' => $this->pool->id, 'user_id' => $user->id]);
@@ -106,6 +110,8 @@ class EntryImportControllerTest extends TestCase
             ->assertInertia(fn (AssertableInertia $page) => $page
                 ->component('manage/backfill-review')
                 ->where('preview.has_errors', false)
+                // A phased pool derives no bracket, so authored mode is not applicable.
+                ->where('preview.can_author', false)
             );
     }
 
@@ -249,6 +255,115 @@ class EntryImportControllerTest extends TestCase
             ->firstOrFail();
 
         $this->assertSame([$byPosition[2]->id, $byPosition[1]->id], array_map('intval', $row->ordered_team_ids));
+    }
+
+    public function test_preview_in_authored_mode_marks_the_payload_literal(): void
+    {
+        $this->actingAs($this->admin())
+            ->post(route('manage.backfill.preview', $this->tournament), [
+                'pool_id' => $this->pool->id,
+                'user_id' => User::factory()->create()->id,
+                'json' => json_encode($this->groupBlob()),
+                'literal' => true,
+            ])
+            ->assertInertia(fn (AssertableInertia $page) => $page
+                ->component('manage/backfill-review')
+                ->where('preview.literal', true)
+                ->where('preview.has_errors', false)
+                ->has('json')
+            );
+    }
+
+    public function test_commit_in_authored_mode_stores_the_authored_bracket_and_marks_the_entry(): void
+    {
+        Notification::fake();
+        $user = User::factory()->create();
+
+        // The author's own knockout participants for one fixture — teams the FIFA derivation would
+        // never put there. Authored mode stores them verbatim.
+        $fixture = $this->tournament->knockoutFixtures()->orderBy('match_number')->firstOrFail();
+        $teams = Team::where('is_placeholder', false)->orderBy('id')->take(2)->get();
+
+        $payload = $this->groupCommitPayload($user);
+        $payload['literal'] = true;
+        $payload['knockout'] = [[
+            'fixture_id' => $fixture->id,
+            'home_goals' => 2,
+            'away_goals' => 1,
+            'advancing_team_id' => $teams[0]->id,
+            'predicted_home_team_id' => $teams[0]->id,
+            'predicted_away_team_id' => $teams[1]->id,
+        ]];
+
+        $this->actingAs($this->admin())
+            ->post(route('manage.backfill.commit', $this->tournament), $payload)
+            ->assertRedirect(route('manage.backfill.create', $this->tournament));
+
+        $entry = $this->pool->entryFor($user);
+        $this->assertNotNull($entry->authored_bracket_at, 'The entry is marked as an authored bracket.');
+
+        $pred = $entry->knockoutPredictions()->where('fixture_id', $fixture->id)->firstOrFail();
+        $this->assertSame($teams[0]->id, $pred->predicted_home_team_id);
+        $this->assertSame($teams[1]->id, $pred->predicted_away_team_id);
+        $this->assertSame($teams[0]->id, $pred->advancing_team_id, 'A 2-1 home score advances the authored home team.');
+        // Only the one authored knockout row is stored — derive mode would have filled all 32.
+        $this->assertSame(1, $entry->knockoutPredictions()->count());
+    }
+
+    public function test_an_authored_bracket_blocks_the_prediction_page_without_re_deriving(): void
+    {
+        // Build a real derived bracket, then deliberately plant an out-of-place team in one knockout
+        // slot and mark the entry as authored — exactly the state an authored backfill leaves.
+        $user = User::factory()->create();
+        $entry = $this->pool->entries()->create(['user_id' => $user->id]);
+        $this->predictAllGroups($entry, $this->tournament, $this->seedOrderScores());
+        (new BracketResolver)->persist($entry);
+
+        $pred = $entry->knockoutPredictions()
+            ->whereNotNull('predicted_home_team_id')
+            ->whereNotNull('predicted_away_team_id')
+            ->firstOrFail();
+        $stranger = Team::where('is_placeholder', false)
+            ->whereNotIn('id', [$pred->predicted_home_team_id, $pred->predicted_away_team_id])
+            ->firstOrFail();
+
+        $pred->update([
+            'predicted_home_team_id' => $stranger->id,
+            'advancing_team_id' => $stranger->id,
+            'home_goals' => 1,
+            'away_goals' => 0,
+        ]);
+        $entry->authored_bracket_at = now();
+        $entry->save();
+
+        // Opening the wizard would re-derive (and wipe the stranger) — instead it must redirect.
+        $this->actingAs($user)
+            ->get(route('pools.predict.edit', $this->pool))
+            ->assertRedirect(route('pools.show', $this->pool));
+
+        $this->assertSame(
+            $stranger->id,
+            $entry->knockoutPredictions()->where('fixture_id', $pred->fixture_id)->value('predicted_home_team_id'),
+            'The page load must not re-derive an authored bracket.',
+        );
+    }
+
+    public function test_the_create_screen_badges_users_with_an_authored_import(): void
+    {
+        $authored = User::factory()->create();
+        $entry = $this->pool->entries()->create(['user_id' => $authored->id]);
+        $entry->authored_bracket_at = now();
+        $entry->save();
+
+        $plain = User::factory()->create();
+
+        $this->actingAs($this->admin())
+            ->get(route('manage.backfill.create', $this->tournament))
+            ->assertInertia(fn (AssertableInertia $page) => $page
+                ->component('manage/backfill')
+                ->where('users', fn ($users): bool => collect($users)->firstWhere('id', $authored->id)['has_authored_import'] === true
+                    && collect($users)->firstWhere('id', $plain->id)['has_authored_import'] === false)
+            );
     }
 
     /**

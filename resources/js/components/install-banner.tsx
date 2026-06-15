@@ -65,7 +65,7 @@ export function InstallBanner() {
             <div
                 className="pointer-events-none fixed inset-x-0 z-40 flex justify-center px-3 md:hidden"
                 style={{
-                    bottom: 'calc(var(--pool-tab-bar-h) + 0.75rem + env(safe-area-inset-bottom, 0px))',
+                    bottom: 'calc(var(--pool-tab-bar-h) + 0.25rem + env(safe-area-inset-bottom, 0px))',
                 }}
             >
                 <div className="pointer-events-auto flex w-full max-w-md items-center gap-3 rounded-2xl border border-border bg-card/95 p-3 shadow-[var(--sh-lg)] backdrop-blur">

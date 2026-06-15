@@ -47,7 +47,7 @@ export function MobileTopNav() {
         auth: Auth;
         hasLiveMatches?: boolean;
     }>();
-    const { onLive, backHref } = useLiveBack();
+    const { onLive, goBack } = useLiveBack();
 
     if (!isMobile) {
         return null;
@@ -63,7 +63,7 @@ export function MobileTopNav() {
             <LiveButton
                 hasLive={Boolean(props.hasLiveMatches)}
                 onLive={onLive}
-                backHref={backHref}
+                goBack={goBack}
             />
             <PoolSwitcher pool={props.pool} pools={props.joinedPools ?? []} />
             <UserMenuButton user={props.auth.user} />
@@ -73,29 +73,31 @@ export function MobileTopNav() {
 
 /**
  * The floating live affordance. On the Live Center itself it becomes a Back button (the Live link
- * would be a dead end there) returning the user to the pool page they came from; everywhere else it
- * taps through to the Live Center, pulsing red while a match is live and sitting neutral otherwise.
+ * would be a dead end there) returning the user to the page they came from — native browser back,
+ * with a pools-index fallback; everywhere else it taps through to the Live Center, pulsing red while
+ * a match is live and sitting neutral otherwise.
  */
 function LiveButton({
     hasLive,
     onLive,
-    backHref,
+    goBack,
 }: {
     hasLive: boolean;
     onLive: boolean;
-    backHref: string;
+    goBack: () => void;
 }) {
     const { t } = useTranslation();
 
     if (onLive) {
         return (
-            <Link
-                href={backHref}
+            <button
+                type="button"
+                onClick={goBack}
                 aria-label={t('Back')}
                 className="press pointer-events-auto flex size-9 items-center justify-center rounded-full bg-secondary transition-colors"
             >
                 <ArrowLeft className="size-4 text-muted-foreground" />
-            </Link>
+            </button>
         );
     }
 

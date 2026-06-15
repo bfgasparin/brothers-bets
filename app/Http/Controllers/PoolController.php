@@ -51,10 +51,30 @@ class PoolController extends Controller
 
     /**
      * List the available pools (tournaments).
+     *
+     * Opening the installed PWA loads the manifest's start_url (`/pools?source=pwa`); on that one
+     * marker we skip the picker and open the pool the player most recently joined, so relaunching
+     * the app lands on a pool. Browser visits and the post-login redirect reach `/pools` without
+     * the marker, so they are deliberately unaffected.
      */
-    public function index(Request $request): Response
+    public function index(Request $request): RedirectResponse|Response
     {
         $userId = $request->user()->id;
+
+        if ($request->query('source') === 'pwa') {
+            $entry = Entry::query()
+                ->where('user_id', $userId)
+                ->with('pool')
+                // The pool the player most recently joined; the id breaks ties between entries
+                // created in the same second so the choice is deterministic.
+                ->orderByDesc('created_at')
+                ->orderByDesc('id')
+                ->first();
+
+            if ($entry !== null) {
+                return redirect()->route('pools.show', $entry->pool);
+            }
+        }
 
         $pools = Pool::query()
             // The size of each pool (its entry count) — distinct per pool (sibling pools each have

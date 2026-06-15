@@ -34,11 +34,15 @@ function formatValue(value: number | null): string {
 export function StandingsList({
     entries,
     primaryStatLabel,
-    stickyOffsetClassName = 'bottom-[var(--pool-tab-bar-h)]',
+    stickyOffsetClassName = 'bottom-[calc(max(0px,var(--pool-tab-bar-h)_-_0.5rem))]',
 }: {
     entries: LeaderboardEntry[];
     primaryStatLabel: string;
-    /** Where the floating "Jump to me" bar sits — defaults to clearing the mobile pool tab bar. */
+    /**
+     * Where the floating "Jump to me" bar sits — defaults to clearing the mobile pool tab bar,
+     * tucked 0.5rem closer to the lowered tab pill. `max(0px, …)` clamps to `bottom-0` on desktop,
+     * where `--pool-tab-bar-h` is `0` (no tab bar), so desktop positioning is unchanged.
+     */
     stickyOffsetClassName?: string;
 }) {
     const { t } = useTranslation();

@@ -12,7 +12,7 @@ export function CompareFab({ onClick }: { onClick: () => void }) {
     const { t } = useTranslation();
 
     return (
-        <div className="pointer-events-none fixed inset-x-0 bottom-[var(--pool-tab-bar-h)] z-50 flex justify-end px-3 pb-3 md:hidden">
+        <div className="pointer-events-none fixed inset-x-0 bottom-[var(--pool-tab-bar-h)] z-50 flex justify-end px-3 pb-1 md:hidden">
             <button
                 type="button"
                 onClick={onClick}

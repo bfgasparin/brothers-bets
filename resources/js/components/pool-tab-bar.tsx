@@ -47,7 +47,7 @@ export function PoolTabBar() {
         >
             <nav
                 aria-label={t('Pool sections')}
-                className="pointer-events-auto inline-flex items-stretch gap-1 rounded-2xl border border-border bg-card/95 p-1.5 shadow-[var(--sh-lg)] backdrop-blur"
+                className="floating-nav-surface pointer-events-auto flex w-full max-w-md items-stretch gap-1 rounded-2xl p-1.5 shadow-[var(--sh-lg)]"
             >
                 {items.map((item) => {
                     const active = isCurrentUrl(item.href);
@@ -59,7 +59,7 @@ export function PoolTabBar() {
                             href={item.href}
                             aria-current={active ? 'page' : undefined}
                             className={cn(
-                                'flex w-[4.75rem] flex-col items-center justify-center gap-0.5 rounded-xl py-1.5 text-[11px] font-semibold transition-colors',
+                                'flex flex-1 flex-col items-center justify-center gap-0.5 rounded-xl py-1.5 text-[11px] font-semibold transition-colors',
                                 active
                                     ? 'bg-primary/10 text-primary'
                                     : 'text-muted-foreground',

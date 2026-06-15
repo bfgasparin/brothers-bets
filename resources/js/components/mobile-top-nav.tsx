@@ -53,9 +53,9 @@ export function MobileTopNav() {
 
     return (
         <div
-            className="pointer-events-none fixed inset-x-0 top-0 z-40 flex items-start justify-between gap-2 px-3 md:hidden"
+            className="floating-top-bar pointer-events-auto fixed inset-x-0 top-0 z-40 flex items-center justify-between gap-2 px-3 pb-2 shadow-[var(--sh-md)] md:hidden"
             style={{
-                paddingTop: 'calc(0.75rem + env(safe-area-inset-top, 0px))',
+                paddingTop: 'calc(0.5rem + env(safe-area-inset-top, 0px))',
             }}
         >
             <LiveButton hasLive={Boolean(props.hasLiveMatches)} />
@@ -76,7 +76,7 @@ function LiveButton({ hasLive }: { hasLive: boolean }) {
         <Link
             href={live.index()}
             aria-label={t('Live Center')}
-            className="press pointer-events-auto flex size-9 items-center justify-center rounded-full border border-border bg-card/95 shadow-[var(--sh-md)] backdrop-blur"
+            className="press pointer-events-auto flex size-9 items-center justify-center rounded-full"
         >
             {hasLive ? (
                 <LivePulse />
@@ -114,7 +114,7 @@ function PoolSwitcher({
             <SheetTrigger asChild>
                 <button
                     type="button"
-                    className="press pointer-events-auto inline-flex max-w-[52vw] items-center gap-2 rounded-full border border-border bg-card/95 py-1.5 pr-3 pl-1.5 shadow-[var(--sh-md)] backdrop-blur"
+                    className="press pointer-events-auto inline-flex max-w-[52vw] items-center gap-2 rounded-full py-1.5 pr-3 pl-1.5"
                 >
                     {pool && accent ? (
                         <span
@@ -229,7 +229,7 @@ function UserMenuButton({ user }: { user: User }) {
                 <button
                     type="button"
                     aria-label={t('Account menu')}
-                    className="press pointer-events-auto rounded-full border border-border bg-card/95 p-0.5 shadow-[var(--sh-md)] backdrop-blur"
+                    className="press pointer-events-auto rounded-full p-0.5"
                 >
                     <Avatar className="size-9 overflow-hidden rounded-full">
                         <AvatarImage src={user.avatar} alt={user.name} />

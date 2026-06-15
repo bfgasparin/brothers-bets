@@ -1,10 +1,12 @@
 import { Check, Search } from 'lucide-react';
 import { useState } from 'react';
 import PlayerAvatar from '@/components/player-avatar';
+import { Button } from '@/components/ui/button';
 import {
     Dialog,
     DialogContent,
     DialogDescription,
+    DialogFooter,
     DialogHeader,
     DialogTitle,
 } from '@/components/ui/dialog';
@@ -157,6 +159,12 @@ export function AddPlayerDialog({
                         {t('Maximum of :limit players reached.', { limit })}
                     </p>
                 )}
+
+                <DialogFooter>
+                    <Button type="button" onClick={() => onOpenChange(false)}>
+                        {t('Done')}
+                    </Button>
+                </DialogFooter>
             </DialogContent>
         </Dialog>
     );

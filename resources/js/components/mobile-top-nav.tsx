@@ -76,7 +76,10 @@ function LiveButton({ hasLive }: { hasLive: boolean }) {
         <Link
             href={live.index()}
             aria-label={t('Live Center')}
-            className="press pointer-events-auto flex size-9 items-center justify-center rounded-full"
+            className={cn(
+                'press pointer-events-auto flex size-9 items-center justify-center rounded-full transition-colors',
+                hasLive ? 'bg-red-500/12' : 'bg-secondary',
+            )}
         >
             {hasLive ? (
                 <LivePulse />

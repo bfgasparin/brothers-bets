@@ -4,6 +4,7 @@ import Heading from '@/components/heading';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { useCurrentUrl } from '@/hooks/use-current-url';
+import { useIsMobile } from '@/hooks/use-mobile';
 import { useTranslation } from '@/hooks/use-translation';
 import { cn, toUrl } from '@/lib/utils';
 import { edit as editAppearance } from '@/routes/appearance';
@@ -11,6 +12,7 @@ import { edit as editLanguage } from '@/routes/language';
 import { edit } from '@/routes/profile';
 import { edit as editSecurity } from '@/routes/security';
 import type { NavItem } from '@/types';
+import MobileSettingsShell from './mobile-settings-shell';
 
 const sidebarNavItems: NavItem[] = [
     {
@@ -38,6 +40,12 @@ const sidebarNavItems: NavItem[] = [
 export default function SettingsLayout({ children }: PropsWithChildren) {
     const { isCurrentOrParentUrl } = useCurrentUrl();
     const { t } = useTranslation();
+    const isMobile = useIsMobile();
+
+    // Mobile gets a self-contained full-screen master → detail shell; desktop keeps the sidebar.
+    if (isMobile) {
+        return <MobileSettingsShell>{children}</MobileSettingsShell>;
+    }
 
     return (
         <div className="px-4 py-6 sm:px-6 lg:px-8">

@@ -42,7 +42,7 @@ export function PoolTabBar() {
             className="pointer-events-none fixed inset-x-0 bottom-0 z-40 flex justify-center px-3 md:hidden"
             style={{
                 paddingBottom:
-                    'calc(0.75rem + env(safe-area-inset-bottom, 0px))',
+                    'calc(0.25rem + env(safe-area-inset-bottom, 0px))',
             }}
         >
             <nav

@@ -35,7 +35,7 @@ type ComparingProps = {
  */
 export function CompareDock(props: SelectingProps | ComparingProps) {
     return (
-        <div className="pointer-events-none fixed inset-x-0 bottom-[var(--pool-tab-bar-h)] z-50 flex justify-center px-3 pb-3 sm:justify-end sm:px-6 sm:pb-6">
+        <div className="pointer-events-none fixed inset-x-0 bottom-[var(--pool-tab-bar-h)] z-50 flex justify-center px-3 pb-1 sm:justify-end sm:px-6 sm:pb-6">
             <div className="pointer-events-auto flex max-w-[calc(100vw-1.5rem)] flex-wrap items-center gap-2 rounded-2xl border border-border bg-card/95 px-3 py-2.5 shadow-[var(--sh-lg)] backdrop-blur sm:max-w-[36rem]">
                 {props.mode === 'selecting' ? (
                     <SelectingDock {...props} />

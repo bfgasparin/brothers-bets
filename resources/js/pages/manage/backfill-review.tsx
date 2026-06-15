@@ -50,6 +50,10 @@ interface PreviewData {
     counts: { group: number; knockout: number };
     group_ties: GroupTie[];
     has_errors: boolean;
+    // Whether this preview is the JSON's bracket stored verbatim (authored mode) vs the FIFA-derived one.
+    literal: boolean;
+    // Whether authored mode is even available (upfront pools derive a bracket; phased pools don't).
+    can_author: boolean;
 }
 
 interface ReviewProps {
@@ -59,6 +63,8 @@ interface ReviewProps {
     preview: PreviewData;
     thirds_team_ids: number[];
     group_standings_team_ids: Record<string, number[]>;
+    // The raw pasted blob, so we can re-preview in the other bracket mode without a re-paste.
+    json: string;
 }
 
 type RowValue = { home: string; away: string; advancing: string };
@@ -410,6 +416,7 @@ export default function BackfillReview({
     preview,
     thirds_team_ids: thirdsTeamIds,
     group_standings_team_ids: groupStandingsTeamIds,
+    json,
 }: ReviewProps) {
     const { t } = useTranslation();
 
@@ -435,6 +442,30 @@ export default function BackfillReview({
             ...current,
             [fixtureId]: { ...current[fixtureId], ...patch },
         }));
+    };
+
+    // Knockout rows whose authored teams disagree with the FIFA-derived bracket — the cue to offer
+    // importing the bracket as authored instead of deriving it. (Empty once already in authored mode,
+    // where the table IS the JSON's bracket.)
+    const bracketMismatchRows = preview.rows.filter(
+        (row) =>
+            row.is_knockout &&
+            (row.flags.includes('matchup_mismatch') ||
+                row.flags.includes('advances_not_in_match')),
+    );
+    const offerAuthored =
+        preview.can_author &&
+        !preview.literal &&
+        bracketMismatchRows.length > 0;
+
+    // Re-render the review in the chosen bracket mode by re-parsing the same blob server-side, so the
+    // table always shows exactly what a commit would store. Discards in-screen score edits by design.
+    const repreview = (literal: boolean): void => {
+        router.post(
+            manage.backfill.preview(tournament.slug).url,
+            { pool_id: pool.id, user_id: user.id, json, literal },
+            { preserveScroll: true },
+        );
     };
 
     // Knockout matches whose pasted advancing team isn't in the derived match-up. They block the import
@@ -498,6 +529,8 @@ export default function BackfillReview({
             home_goals: number | null;
             away_goals: number | null;
             advancing_team_id: number | null;
+            predicted_home_team_id?: number | null;
+            predicted_away_team_id?: number | null;
         }> = [];
 
         for (const row of preview.rows) {
@@ -520,6 +553,13 @@ export default function BackfillReview({
                 home_goals: toNumberOrNull(value.home),
                 away_goals: toNumberOrNull(value.away),
                 advancing_team_id: toNumberOrNull(value.advancing),
+                // In authored mode the table's teams ARE the JSON's bracket; store them verbatim.
+                ...(preview.literal
+                    ? {
+                          predicted_home_team_id: row.home?.id ?? null,
+                          predicted_away_team_id: row.away?.id ?? null,
+                      }
+                    : {}),
             });
         }
 
@@ -531,6 +571,7 @@ export default function BackfillReview({
                 pool_id: pool.id,
                 user_id: user.id,
                 overwrite,
+                literal: preview.literal,
                 group,
                 knockout,
                 thirds_team_ids: thirdsTeamIds,
@@ -597,6 +638,51 @@ export default function BackfillReview({
                 )}
 
                 <Banner preview={preview} />
+
+                {offerAuthored && (
+                    <div className="flex flex-col gap-3 rounded-2xl border border-amber/40 bg-accent/[0.07] p-4 text-sm sm:flex-row sm:items-center sm:justify-between">
+                        <span>
+                            <span className="font-semibold">
+                                {t(
+                                    ':count knockout matches don’t match the bracket derived from the group scores.',
+                                    { count: bracketMismatchRows.length },
+                                )}
+                            </span>{' '}
+                            {t(
+                                'If the player’s group classification didn’t follow the tournament rules, you can store their bracket exactly as authored instead.',
+                            )}
+                        </span>
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            className="shrink-0"
+                            onClick={() => repreview(true)}
+                        >
+                            {t('Import the bracket as authored')}
+                        </Button>
+                    </div>
+                )}
+
+                {preview.literal && (
+                    <div className="flex flex-col gap-3 rounded-2xl border border-primary/30 bg-primary/[0.06] p-4 text-sm sm:flex-row sm:items-center sm:justify-between">
+                        <span>
+                            <span className="font-semibold">
+                                {t('Importing the bracket as authored.')}
+                            </span>{' '}
+                            {t(
+                                'The knockout teams are taken from the JSON verbatim — the FIFA derivation is bypassed.',
+                            )}
+                        </span>
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            className="shrink-0"
+                            onClick={() => repreview(false)}
+                        >
+                            {t('Use the derived bracket instead')}
+                        </Button>
+                    </div>
+                )}
 
                 <GroupTiesNotice ties={preview.group_ties} />
 

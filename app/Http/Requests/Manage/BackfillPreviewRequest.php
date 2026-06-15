@@ -45,7 +45,18 @@ class BackfillPreviewRequest extends FormRequest
             'json' => ['required', 'string'],
             'payload' => ['required', 'array'],
             'payload.matches' => ['required', 'array', 'min:1'],
+            // Preview the JSON's bracket stored verbatim (authored mode) instead of the derived one.
+            'literal' => ['sometimes', 'boolean'],
         ];
+    }
+
+    /**
+     * Whether to preview the knockout bracket exactly as authored in the JSON (upfront pools only),
+     * bypassing the FIFA derivation.
+     */
+    public function literal(): bool
+    {
+        return $this->boolean('literal');
     }
 
     /**

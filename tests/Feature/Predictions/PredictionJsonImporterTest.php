@@ -184,6 +184,83 @@ class PredictionJsonImporterTest extends TestCase
         $this->assertSame($derivedHome->id, $imported->advancing_team_id);
     }
 
+    public function test_authored_mode_stores_the_json_bracket_verbatim(): void
+    {
+        $json = $this->jsonFromEntry($this->buildReferenceEntry());
+        // The author dropped a stranger into a knockout home spot (their group classification didn't
+        // follow FIFA rules). Authored mode keeps it; the derived bracket would discard it.
+        [$row, $derivedHome, $stranger] = $this->corruptKnockoutHomePick($json);
+
+        $target = $this->entryFor(User::factory()->create());
+        $parsed = $this->importer->parse($this->pool, $json);
+
+        $this->importer->commit($target, $this->authored($parsed));
+
+        $imported = $target->knockoutPredictions()->where('fixture_id', $row['fixture_id'])->firstOrFail();
+        $this->assertSame($stranger->id, $imported->predicted_home_team_id, 'Authored mode stores the JSON team, not the derived qualifier.');
+        $this->assertSame(
+            Team::where('code', $row['away_team'])->value('id'),
+            $imported->predicted_away_team_id,
+            'The untouched away spot keeps the JSON team.',
+        );
+        // A decisive home win advances the authored home team.
+        $this->assertSame($stranger->id, $imported->advancing_team_id);
+        $this->assertNotNull($target->refresh()->authored_bracket_at, 'The entry is marked as an authored bracket.');
+
+        // Contrast: re-committing in derive mode restores the FIFA-derived home and clears the mark.
+        $this->importer->commit($target, $this->accept($parsed));
+        $reimported = $target->knockoutPredictions()->where('fixture_id', $row['fixture_id'])->firstOrFail();
+        $this->assertSame($derivedHome->id, $reimported->predicted_home_team_id);
+        $this->assertNull($target->refresh()->authored_bracket_at);
+    }
+
+    public function test_authored_mode_advances_the_pick_on_a_drawn_match(): void
+    {
+        $json = $this->jsonFromEntry($this->buildReferenceEntry());
+        [$row, , $stranger] = $this->corruptKnockoutHomePick($json);
+
+        // A draw makes the "advances" pick load-bearing — and the pick (the stranger) is one of the
+        // authored teams, so authored mode honours it.
+        $matchIndex = $this->matchIndexForNumber($json, $row['match_number']);
+        $json['matches'][$matchIndex]['home_goals'] = 1;
+        $json['matches'][$matchIndex]['away_goals'] = 1;
+
+        $target = $this->entryFor(User::factory()->create());
+        $this->importer->commit($target, $this->authored($this->importer->parse($this->pool, $json)));
+
+        $imported = $target->knockoutPredictions()->where('fixture_id', $row['fixture_id'])->firstOrFail();
+        $this->assertSame($stranger->id, $imported->advancing_team_id);
+    }
+
+    public function test_authored_mode_entries_still_score(): void
+    {
+        // Group results in seed order — a seed-order prediction scores. Authored mode keeps the entry
+        // in the scoring pipeline (it is not zeroed out for having an out-of-place knockout team).
+        $this->recordOfficialGroupResults($this->tournament, $this->seedOrderScores());
+
+        $json = $this->jsonFromEntry($this->buildReferenceEntry());
+        $this->corruptKnockoutHomePick($json);
+
+        $target = $this->entryFor(User::factory()->create());
+        $this->importer->commit($target, $this->authored($this->importer->parse($this->pool, $json)));
+
+        $this->assertGreaterThan(0, $target->refresh()->total_points);
+    }
+
+    public function test_authored_mode_is_a_no_op_for_a_phased_pool(): void
+    {
+        $phased = $this->tournament->pools()->where('slug', 'world-cup-2026-brothers')->firstOrFail();
+        $this->recordOfficialGroupResults($this->tournament, $this->seedOrderScores());
+        (new OfficialBracketProjector)->project($this->tournament);
+
+        $target = $phased->entries()->create(['user_id' => User::factory()->create()->id]);
+        // Authored mode is upfront-only; a phased commit ignores the flag and never marks the entry.
+        $this->importer->commit($target, $this->authored($this->importer->parse($phased, $this->phasedJson())));
+
+        $this->assertNull($target->refresh()->authored_bracket_at);
+        $this->assertGreaterThan(0, $target->knockoutPredictions()->whereNotNull('predicted_home_team_id')->count());
+    }
+
     public function test_a_phased_pool_offers_no_positional_salvage(): void
     {
         $phased = $this->tournament->pools()->where('slug', 'world-cup-2026-brothers')->firstOrFail();
@@ -629,6 +706,15 @@ class PredictionJsonImporterTest extends TestCase
     private function accept(ParsedImport $parsed): CorrectedImport
     {
         return new CorrectedImport($parsed->groupRows(), $parsed->knockoutRows(), $parsed->thirdsTeamIds, $parsed->groupStandings);
+    }
+
+    /**
+     * An "import the bracket as authored" commit: the JSON's own knockout participants, with the
+     * literal flag set.
+     */
+    private function authored(ParsedImport $parsed): CorrectedImport
+    {
+        return new CorrectedImport($parsed->groupRows(), $parsed->literalKnockoutRows(), $parsed->thirdsTeamIds, $parsed->groupStandings, literal: true);
     }
 
     /**

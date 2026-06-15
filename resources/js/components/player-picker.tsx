@@ -18,6 +18,22 @@ export interface PlayerOption {
     name: string;
     email: string | null;
     avatar: string | null;
+    // Set when this player's entry was backfilled "as authored" — badged so admins can spot whose
+    // accounts had the group-classification problem.
+    has_authored_import?: boolean;
+}
+
+function AuthoredBadge() {
+    const { t } = useTranslation();
+
+    return (
+        <span
+            title={t('Bracket imported as authored')}
+            className="inline-flex shrink-0 items-center rounded-full bg-accent/15 px-2 py-0.5 text-[10px] font-bold tracking-wide text-[#8a5a00] uppercase dark:text-amber-300"
+        >
+            {t('Authored')}
+        </span>
+    );
 }
 
 /**
@@ -89,8 +105,13 @@ export function PlayerPicker({
                             className="size-8"
                         />
                         <span className="min-w-0 flex-1">
-                            <span className="block truncate font-display font-semibold text-foreground">
-                                {selected.name}
+                            <span className="flex items-center gap-1.5 font-display font-semibold text-foreground">
+                                <span className="truncate">
+                                    {selected.name}
+                                </span>
+                                {selected.has_authored_import && (
+                                    <AuthoredBadge />
+                                )}
                             </span>
                             <span className="block truncate text-xs text-muted-foreground">
                                 {selected.email ?? t('No email')}
@@ -162,8 +183,13 @@ export function PlayerPicker({
                                                     className="size-9"
                                                 />
                                                 <span className="min-w-0 flex-1">
-                                                    <span className="block truncate font-display font-semibold">
-                                                        {player.name}
+                                                    <span className="flex items-center gap-1.5 font-display font-semibold">
+                                                        <span className="truncate">
+                                                            {player.name}
+                                                        </span>
+                                                        {player.has_authored_import && (
+                                                            <AuthoredBadge />
+                                                        )}
                                                     </span>
                                                     <span className="block truncate text-xs text-muted-foreground">
                                                         {player.email ??

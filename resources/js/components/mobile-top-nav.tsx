@@ -3,12 +3,6 @@ import { ArrowLeft, Check, ChevronDown, LayoutGrid, Radio } from 'lucide-react';
 import { useState } from 'react';
 import { LivePulse } from '@/components/live-badge';
 import { tournamentNavItems } from '@/components/nav-tournament';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import {
-    DropdownMenu,
-    DropdownMenuContent,
-    DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
 import {
     Sheet,
     SheetClose,
@@ -18,17 +12,16 @@ import {
     SheetTitle,
     SheetTrigger,
 } from '@/components/ui/sheet';
-import { UserMenuContent } from '@/components/user-menu-content';
+import { UserMenuButton } from '@/components/user-menu-button';
 import { useCurrentUrl } from '@/hooks/use-current-url';
-import { useInitials } from '@/hooks/use-initials';
 import { useLiveBack } from '@/hooks/use-live-back';
 import { useIsMobile } from '@/hooks/use-mobile';
+import { useSettingsBackTracker } from '@/hooks/use-settings-back';
 import { useTranslation } from '@/hooks/use-translation';
 import { resolveAccent, sourceMonogram } from '@/lib/accents';
 import { cn } from '@/lib/utils';
 import live from '@/routes/live';
 import { index as poolsIndex } from '@/routes/pools';
-import type { User } from '@/types';
 import type { Auth } from '@/types/auth';
 import type { JoinedPool, TournamentNavInfo } from '@/types/navigation';
 
@@ -41,15 +34,21 @@ import type { JoinedPool, TournamentNavInfo } from '@/types/navigation';
  */
 export function MobileTopNav() {
     const isMobile = useIsMobile();
-    const { props } = usePage<{
+    const { props, url } = usePage<{
         pool?: TournamentNavInfo;
         joinedPools: JoinedPool[];
         auth: Auth;
         hasLiveMatches?: boolean;
     }>();
     const { onLive, goBack } = useLiveBack();
+    // Always observe navigation (this runs before the early return below, like `useLiveBack`) so the
+    // mobile Settings shell's Back can return to the page Settings was opened from — that shell mounts
+    // too late to see it itself.
+    useSettingsBackTracker();
 
-    if (!isMobile) {
+    // The Settings area renders its own self-contained top bar (back + title + avatar), so the global
+    // chrome — live button and pool switcher — steps aside there to read as an isolated account space.
+    if (!isMobile || url.startsWith('/settings')) {
         return null;
     }
 
@@ -248,36 +247,5 @@ function PoolSwitcher({
                 </ul>
             </SheetContent>
         </Sheet>
-    );
-}
-
-function UserMenuButton({ user }: { user: User }) {
-    const getInitials = useInitials();
-    const { t } = useTranslation();
-
-    return (
-        <DropdownMenu modal={false}>
-            <DropdownMenuTrigger asChild>
-                <button
-                    type="button"
-                    aria-label={t('Account menu')}
-                    className="press pointer-events-auto rounded-full p-0.5"
-                >
-                    <Avatar className="size-9 overflow-hidden rounded-full">
-                        <AvatarImage src={user.avatar} alt={user.name} />
-                        <AvatarFallback className="rounded-full bg-neutral-200 text-black dark:bg-neutral-700 dark:text-white">
-                            {getInitials(user.name)}
-                        </AvatarFallback>
-                    </Avatar>
-                </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent
-                align="end"
-                side="bottom"
-                className="min-w-56 rounded-lg [&_[data-slot=dropdown-menu-item]]:py-3"
-            >
-                <UserMenuContent user={user} />
-            </DropdownMenuContent>
-        </DropdownMenu>
     );
 }

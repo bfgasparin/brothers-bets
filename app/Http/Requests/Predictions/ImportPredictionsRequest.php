@@ -26,6 +26,11 @@ class ImportPredictionsRequest extends PredictionRequest
             return false;
         }
 
+        // An organizer-authored bracket must never be re-derived; importing would cascade over it.
+        if ($this->existingEntry()?->hasAuthoredBracket() ?? false) {
+            return false;
+        }
+
         return in_array(
             PredictionWindowStatus::Open,
             app(PredictionWindowResolver::class)->windows($pool),

@@ -63,9 +63,21 @@ class PredictionController extends Controller
             return to_route('pools.show', $pool);
         }
 
+        // An organizer-authored bracket (admin backfill of a JSON whose classification didn't follow
+        // FIFA rules) must never be re-derived — and persist() below would do exactly that on load.
+        // Block the wizard entirely; the player views the rest of the pool but can't edit these picks.
+        if ($entry->hasAuthoredBracket()) {
+            Inertia::flash('toast', [
+                'type' => 'info',
+                'message' => __('Your predictions were entered by an organizer and can’t be edited here.'),
+            ]);
+
+            return to_route('pools.show', $pool);
+        }
+
         // Upfront pools cascade the self-derived bracket onto the entry's knockout rows; phased
         // pools predict the official bracket, so there is nothing to cascade.
-        if ($entry !== null && $pool->predictsKnockoutBracket()) {
+        if ($pool->predictsKnockoutBracket()) {
             $this->resolver->persist($entry);
         }
 

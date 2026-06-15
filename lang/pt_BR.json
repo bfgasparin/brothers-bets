@@ -746,5 +746,14 @@
     "Review my predictions": "Revisar meus palpites",
     "If this looks wrong, reply to this email or reach out to the pool organizer.": "Se algo estiver errado, responda a este e-mail ou fale com o organizador do bolão.",
     "You're getting this because you're playing :pool on Brothers Bets. We only email when an organizer changes the predictions saved on your behalf.": "Você está recebendo isto porque participa de :pool no Brothers Bets. Só enviamos e-mail quando um organizador altera os palpites salvos em seu nome.",
-    ":pool — your predictions were updated": ":pool — seus palpites foram atualizados"
+    ":pool — your predictions were updated": ":pool — seus palpites foram atualizados",
+    ":count knockout matches don’t match the bracket derived from the group scores.": ":count partidas do mata-mata não correspondem à chave derivada dos placares da fase de grupos.",
+    "If the player’s group classification didn’t follow the tournament rules, you can store their bracket exactly as authored instead.": "Se a classificação dos grupos do jogador não seguiu as regras do torneio, você pode salvar a chave dele exatamente como foi informada.",
+    "Import the bracket as authored": "Importar a chave como foi informada",
+    "Importing the bracket as authored.": "Importando a chave como foi informada.",
+    "The knockout teams are taken from the JSON verbatim — the FIFA derivation is bypassed.": "Os times do mata-mata são usados exatamente como estão no JSON — a derivação da FIFA é ignorada.",
+    "Use the derived bracket instead": "Usar a chave derivada",
+    "Bracket imported as authored": "Chave importada como foi informada",
+    "Authored": "Informada",
+    "Your predictions were entered by an organizer and can’t be edited here.": "Seus palpites foram inseridos por um organizador e não podem ser editados aqui."
 }

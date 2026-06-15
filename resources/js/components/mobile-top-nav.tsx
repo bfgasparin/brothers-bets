@@ -1,5 +1,5 @@
 import { Link, usePage } from '@inertiajs/react';
-import { Check, ChevronDown, LayoutGrid, Radio } from 'lucide-react';
+import { ArrowLeft, Check, ChevronDown, LayoutGrid, Radio } from 'lucide-react';
 import { useState } from 'react';
 import { LivePulse } from '@/components/live-badge';
 import { tournamentNavItems } from '@/components/nav-tournament';
@@ -21,6 +21,7 @@ import {
 import { UserMenuContent } from '@/components/user-menu-content';
 import { useCurrentUrl } from '@/hooks/use-current-url';
 import { useInitials } from '@/hooks/use-initials';
+import { useLiveBack } from '@/hooks/use-live-back';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useTranslation } from '@/hooks/use-translation';
 import { resolveAccent, sourceMonogram } from '@/lib/accents';
@@ -46,6 +47,7 @@ export function MobileTopNav() {
         auth: Auth;
         hasLiveMatches?: boolean;
     }>();
+    const { onLive, backHref } = useLiveBack();
 
     if (!isMobile) {
         return null;
@@ -58,7 +60,11 @@ export function MobileTopNav() {
                 paddingTop: 'calc(0.5rem + env(safe-area-inset-top, 0px))',
             }}
         >
-            <LiveButton hasLive={Boolean(props.hasLiveMatches)} />
+            <LiveButton
+                hasLive={Boolean(props.hasLiveMatches)}
+                onLive={onLive}
+                backHref={backHref}
+            />
             <PoolSwitcher pool={props.pool} pools={props.joinedPools ?? []} />
             <UserMenuButton user={props.auth.user} />
         </div>
@@ -66,11 +72,32 @@ export function MobileTopNav() {
 }
 
 /**
- * The floating live affordance: a small round button that pulses red while a match is live and
- * sits neutral otherwise, tapping through to the Live Center.
+ * The floating live affordance. On the Live Center itself it becomes a Back button (the Live link
+ * would be a dead end there) returning the user to the pool page they came from; everywhere else it
+ * taps through to the Live Center, pulsing red while a match is live and sitting neutral otherwise.
  */
-function LiveButton({ hasLive }: { hasLive: boolean }) {
+function LiveButton({
+    hasLive,
+    onLive,
+    backHref,
+}: {
+    hasLive: boolean;
+    onLive: boolean;
+    backHref: string;
+}) {
     const { t } = useTranslation();
+
+    if (onLive) {
+        return (
+            <Link
+                href={backHref}
+                aria-label={t('Back')}
+                className="press pointer-events-auto flex size-9 items-center justify-center rounded-full bg-secondary transition-colors"
+            >
+                <ArrowLeft className="size-4 text-muted-foreground" />
+            </Link>
+        );
+    }
 
     return (
         <Link

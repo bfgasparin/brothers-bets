@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import { Flag } from '@/components/flag';
+import { useTranslation } from '@/hooks/use-translation';
 import { cn } from '@/lib/utils';
 import type { TeamRef } from '@/types/pools';
 
@@ -21,6 +22,8 @@ export function TeamScoreRow({
     children: ReactNode;
     className?: string;
 }) {
+    const { tCountry } = useTranslation();
+
     return (
         <div
             className={cn(
@@ -30,7 +33,9 @@ export function TeamScoreRow({
         >
             <span className="flex min-w-0 items-center gap-2.5 text-sm font-semibold">
                 <Flag team={team} className="h-5 w-7 rounded-[3px]" />
-                <span className="truncate">{team?.name ?? label ?? 'TBD'}</span>
+                <span className="truncate">
+                    {team ? tCountry(team.code, team.name) : (label ?? 'TBD')}
+                </span>
             </span>
             <div className="shrink-0">{children}</div>
         </div>

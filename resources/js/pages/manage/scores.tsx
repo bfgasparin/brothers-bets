@@ -225,14 +225,14 @@ function ReviewRow({ row, slug }: { row: ReviewRowData; slug: string }) {
                                     className="gap-1 text-xs"
                                 >
                                     <Flag team={row.home} className="h-4 w-6" />
-                                    {row.home!.code ?? row.home!.name}
+                                    {tCountry(row.home!.code, row.home!.name)}
                                 </ToggleGroupItem>
                                 <ToggleGroupItem
                                     value={String(row.away!.id)}
                                     className="gap-1 text-xs"
                                 >
                                     <Flag team={row.away} className="h-4 w-6" />
-                                    {row.away!.code ?? row.away!.name}
+                                    {tCountry(row.away!.code, row.away!.name)}
                                 </ToggleGroupItem>
                             </ToggleGroup>
                         </>
@@ -242,7 +242,8 @@ function ReviewRow({ row, slug }: { row: ReviewRowData; slug: string }) {
                                 {t('Advances')}
                             </span>
                             <Flag team={winnerTeam} className="h-4 w-6" />
-                            {winnerTeam?.code ?? winnerTeam?.name}
+                            {winnerTeam &&
+                                tCountry(winnerTeam.code, winnerTeam.name)}
                         </span>
                     )}
                 </div>

@@ -261,14 +261,14 @@ function ReviewRow({
                                     className="gap-1 text-xs"
                                 >
                                     <Flag team={row.home} className="h-4 w-6" />
-                                    {row.home!.code ?? row.home!.name}
+                                    {tCountry(row.home!.code, row.home!.name)}
                                 </ToggleGroupItem>
                                 <ToggleGroupItem
                                     value={String(row.away!.id)}
                                     className="gap-1 text-xs"
                                 >
                                     <Flag team={row.away} className="h-4 w-6" />
-                                    {row.away!.code ?? row.away!.name}
+                                    {tCountry(row.away!.code, row.away!.name)}
                                 </ToggleGroupItem>
                             </ToggleGroup>
                         </>
@@ -278,7 +278,11 @@ function ReviewRow({
                                 {t('Advances')}
                             </span>
                             <Flag team={decisiveWinner} className="h-4 w-6" />
-                            {decisiveWinner?.code ?? decisiveWinner?.name}
+                            {decisiveWinner &&
+                                tCountry(
+                                    decisiveWinner.code,
+                                    decisiveWinner.name,
+                                )}
                         </span>
                     )}
                 </div>
@@ -351,7 +355,7 @@ function Banner({ preview }: { preview: PreviewData }) {
 }
 
 function GroupTiesNotice({ ties }: { ties: GroupTie[] }) {
-    const { t } = useTranslation();
+    const { t, tCountry } = useTranslation();
 
     if (ties.length === 0) {
         return null;
@@ -387,7 +391,7 @@ function GroupTiesNotice({ ties }: { ties: GroupTie[] }) {
                                     )}
                                     <Flag team={team} className="h-3.5 w-5" />
                                     <span className="text-xs font-medium">
-                                        {team.code ?? team.name}
+                                        {tCountry(team.code, team.name)}
                                     </span>
                                 </span>
                             ))}

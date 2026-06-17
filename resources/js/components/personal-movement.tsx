@@ -1,10 +1,11 @@
-import { ArrowDown, ArrowUp } from 'lucide-react';
+import { ArrowDown, ArrowUp, Minus } from 'lucide-react';
 import { useTranslation } from '@/hooks/use-translation';
 import type { RankMovement } from '@/types/pools';
 
 /**
  * A white, translucent rank-movement indicator that stays legible on a branded gradient card (where
- * the standard {@see MovementArrow} green/red pills would clash). Renders nothing when the rank held.
+ * the standard {@see MovementArrow} green/red pills would clash). Renders nothing when the rank held,
+ * and a neutral dash on a first appearance, where there's no prior board to move against.
  */
 export function PersonalMovement({
     movement,
@@ -20,11 +21,7 @@ export function PersonalMovement({
     }
 
     if (movement === 'new') {
-        return (
-            <span className="rounded-full bg-white/15 px-2 py-0.5 text-[10px] font-bold tracking-wide uppercase">
-                {t('New')}
-            </span>
-        );
+        return <Minus className="size-3.5" aria-label={t('No change')} />;
     }
 
     const up = movement === 'up';

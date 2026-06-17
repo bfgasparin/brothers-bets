@@ -16,7 +16,7 @@ export function CompareFab({ onClick }: { onClick: () => void }) {
             <button
                 type="button"
                 onClick={onClick}
-                className="press pointer-events-auto inline-flex items-center gap-2 rounded-full border border-border bg-card/95 py-2.5 pr-4 pl-3.5 font-display text-sm font-semibold shadow-[var(--sh-lg)] backdrop-blur"
+                className="press floating-nav-surface pointer-events-auto inline-flex items-center gap-2 rounded-full py-2.5 pr-4 pl-3.5 font-display text-sm font-semibold shadow-[var(--sh-lg)]"
             >
                 <GitCompare className="size-4" />
                 {t('Compare')}

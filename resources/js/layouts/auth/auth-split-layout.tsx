@@ -58,9 +58,8 @@ export default function AuthSplitLayout({
                         {t('Members Only · Invite Required')}
                     </span>
                     <h2 className="max-w-md font-display text-4xl font-semibold tracking-tight text-balance text-foreground xl:text-5xl">
-                        {t('Where')}{' '}
-                        <span className="text-primary">{t('the pool')}</span>{' '}
-                        {t('plays for')}{' '}
+                        <span className="text-primary">{t('You predict')}</span>
+                        . {t('You climb. You take the')}{' '}
                         <span className="text-gold">{t('glory')}</span>.
                     </h2>
                     <p className="max-w-sm text-pretty text-muted-foreground">

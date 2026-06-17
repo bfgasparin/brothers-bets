@@ -185,7 +185,7 @@ function FixturePicksSheet({
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent className="gap-0 p-0 sm:max-w-md">
-                <DialogHeader className="gap-3 border-b border-border p-4 pr-12 text-left">
+                <DialogHeader className="min-w-0 gap-3 border-b border-border p-4 pr-12 text-left">
                     <div className="flex items-center justify-between gap-3">
                         <DialogTitle className="min-w-0 flex-1 truncate font-display text-sm font-semibold">
                             {multiPool
@@ -339,7 +339,7 @@ function LiveFixtureCard({
     return (
         <div
             className={cn(
-                'card-elevated flex flex-col gap-3 rounded-2xl border border-border p-4',
+                'card-elevated flex min-w-0 flex-col gap-3 rounded-2xl border border-border p-4',
                 !ended && 'ring-1 ring-red-500/20',
             )}
         >

@@ -1,4 +1,5 @@
 import { ArrowDown, ArrowUp } from 'lucide-react';
+import { useTranslation } from '@/hooks/use-translation';
 import type { RankMovement } from '@/types/pools';
 
 /**
@@ -12,6 +13,8 @@ export function PersonalMovement({
     movement: RankMovement | null;
     delta: number | null;
 }) {
+    const { t } = useTranslation();
+
     if (movement === null || movement === 'same') {
         return null;
     }
@@ -19,7 +22,7 @@ export function PersonalMovement({
     if (movement === 'new') {
         return (
             <span className="rounded-full bg-white/15 px-2 py-0.5 text-[10px] font-bold tracking-wide uppercase">
-                New
+                {t('New')}
             </span>
         );
     }

@@ -86,7 +86,7 @@ export function NavigationIndicator() {
             aria-live="polite"
             className="pointer-events-none fixed inset-x-0 top-[var(--top-nav-h)] z-50 flex justify-center px-3 md:hidden"
         >
-            <div className="mt-3 inline-flex items-center gap-2 rounded-full border border-border bg-card/95 px-3.5 py-2 text-sm font-medium shadow-[var(--sh-lg)] backdrop-blur motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-top-2">
+            <div className="floating-nav-surface mt-3 inline-flex items-center gap-2 rounded-full px-3.5 py-2 text-sm font-medium shadow-[var(--sh-lg)] motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-top-2">
                 <Spinner className="size-4 text-primary" />
                 {t('Loading…')}
             </div>

@@ -303,7 +303,7 @@ class WorldCup2026Seeder extends Seeder
                 'predictions_lock_at' => null,
                 'entry_price' => 50.00,
                 'currency' => 'BRL',
-                'house_fee_percentage' => 11.00,
+                'house_fee_percentage' => 10.00,
                 'prize_structure' => [
                     ['place' => 1, 'percentage' => 70],
                     ['place' => 2, 'percentage' => 20],

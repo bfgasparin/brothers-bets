@@ -266,7 +266,7 @@ class WorldCup2026SeederTest extends TestCase
         // The buy-in, currency, house fee and 70/20/10 prize split.
         $this->assertSame('50.00', $pool->entry_price);
         $this->assertSame('BRL', $pool->currency);
-        $this->assertSame('11.00', $pool->house_fee_percentage);
+        $this->assertSame('10.00', $pool->house_fee_percentage);
         $this->assertSame(
             [70, 20, 10],
             array_column($pool->prize_structure, 'percentage'),

@@ -152,7 +152,7 @@ class JoinPoolTest extends TestCase
                 ->where('pool.can_join', true)
                 ->where('pool.pricing.entry_price', 50)
                 ->where('pool.pricing.currency', 'BRL')
-                ->where('pool.pricing.house_fee_percentage', 11)
+                ->where('pool.pricing.house_fee_percentage', 10)
                 ->has('pool.pricing.prizes', 3)
                 ->where('pool.pricing.prizes.0.place', 1)
                 ->where('pool.pricing.prizes.0.percentage', 70)
@@ -161,7 +161,7 @@ class JoinPoolTest extends TestCase
 
     public function test_the_index_computes_prize_amounts_from_the_pool(): void
     {
-        // Three players in the FF&A pool: 3 × R$50 = R$150, less 11% fee = R$133.50 net.
+        // Three players in the FF&A pool: 3 × R$50 = R$150, less 10% fee = R$135.00 net.
         Entry::factory()->count(3)->for($this->pool)->create();
 
         $this->actingAs($this->user)
@@ -170,8 +170,8 @@ class JoinPoolTest extends TestCase
                 ->where('pools.data.0.slug', 'world-cup-2026-ffa')
                 ->where('pools.data.0.pricing.players', 3)
                 ->where('pools.data.0.pricing.pot', 150)
-                ->where('pools.data.0.pricing.net', 133.5)
-                ->where('pools.data.0.pricing.prizes.0.amount', 93.45)
+                ->where('pools.data.0.pricing.net', 135)
+                ->where('pools.data.0.pricing.prizes.0.amount', 94.5)
             );
     }
 

@@ -53,15 +53,14 @@ export default function Welcome() {
                     </span>
 
                     <h1 className="mt-6 max-w-3xl text-5xl font-semibold tracking-tight text-balance text-foreground sm:text-6xl lg:text-7xl">
-                        {t('Where the')}{' '}
-                        <span className="text-primary">{t('crew')}</span>{' '}
-                        {t('plays for')}{' '}
+                        <span className="text-primary">{t('You predict')}</span>
+                        . {t('You climb. You take the')}{' '}
                         <span className="text-gold">{t('glory')}</span>.
                     </h1>
 
                     <p className="mt-6 max-w-xl text-lg leading-relaxed text-pretty text-muted-foreground">
                         {t(
-                            'Predict the fixtures, climb the leaderboard, and settle the bragging rights. The private prediction club for the Brothers crew — every match, every season.',
+                            'Predict the fixtures, climb the leaderboard, and settle the bragging rights. A private, invite-only prediction club — every match, every season.',
                         )}
                     </p>
 

@@ -17,9 +17,10 @@ const DOWN_CLASSES =
 
 /**
  * How an entry moved on the pool table since the last approved results: a gradient pill with an
- * up/down arrow and the number of places moved, a neutral dash for no change, a "New" tag on
- * first appearance, or nothing before any results have landed. The visible label is the number
- * alone; the full phrase ("Up 3 places") rides in the accessible label.
+ * up/down arrow and the number of places moved, or a neutral dash for no change — including a first
+ * appearance, where there's no prior board to move against — or nothing before any results have
+ * landed. The visible label is the number alone; the full phrase ("Up 3 places") rides in the
+ * accessible label.
  */
 export function MovementArrow({
     movement,
@@ -39,20 +40,7 @@ export function MovementArrow({
         return null;
     }
 
-    if (movement === 'new') {
-        return (
-            <span
-                className={cn(
-                    'inline-flex items-center rounded-full bg-primary/10 px-1.5 py-0.5 font-display text-[10px] font-bold tracking-wide text-pitch-deep uppercase dark:bg-primary/15 dark:text-primary',
-                    className,
-                )}
-            >
-                {t('New')}
-            </span>
-        );
-    }
-
-    if (movement === 'same') {
+    if (movement === 'same' || movement === 'new') {
         return (
             <Minus
                 className={cn(

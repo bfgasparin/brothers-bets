@@ -155,7 +155,7 @@ export function StandingsList({
                         stickyOffsetClassName,
                     )}
                 >
-                    <div className="pointer-events-auto flex w-full max-w-md items-center gap-3 rounded-2xl border border-border bg-card/95 px-4 py-2.5 shadow-[var(--sh-lg)] backdrop-blur">
+                    <div className="floating-nav-surface pointer-events-auto flex w-full max-w-md items-center gap-3 rounded-2xl px-4 py-2.5 shadow-[var(--sh-lg)]">
                         <span className="grid size-9 shrink-0 place-items-center rounded-full bg-pitch-deep font-display text-sm font-semibold text-white tabular-nums">
                             {myEntry.rank}
                         </span>

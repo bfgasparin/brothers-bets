@@ -18,6 +18,24 @@
     }
 }
 
+/* Split the installed PWA from a plain browser tab. `standalone:` matches only inside the
+   installed app window; `browser:` matches everywhere else (a normal tab). Evaluated by the
+   browser at paint time, so they gate layout with no hydration flash — unlike the JS
+   `isStandalone` hook, which reads false until hydration under SSR. Used to keep the floating
+   mobile chrome app-only while a phone browser falls back to a conventional website header.
+   Requires iOS 16.4+ for `display-mode: standalone` in CSS (same floor as `pwa-landscape`). */
+@custom-variant standalone {
+    @media (display-mode: standalone) {
+        @slot;
+    }
+}
+
+@custom-variant browser {
+    @media not all and (display-mode: standalone) {
+        @slot;
+    }
+}
+
 @theme {
     /* Type — Fredoka (display) × Plus Jakarta Sans (body) */
     --font-sans:
@@ -433,12 +451,13 @@
         backdrop-filter: blur(14px) saturate(1.5);
     }
 
-    /* The mobile floating-nav footprints — only under the mobile breakpoint, so desktop keeps the
-       tokens at 0 (no reserved padding, every offset collapses flush). `.has-pool-tab-bar` covers the
-       floating bottom tab pill (in-pool); `.has-floating-nav` covers the floating top switcher/avatar
-       row (all app pages). Both include the iOS safe-area insets so nothing hides behind the notch or
-       home indicator. */
-    @media (max-width: 767px) {
+    /* The mobile floating-nav footprints — only under the mobile breakpoint AND inside the installed
+       PWA, so desktop and plain browser tabs keep the tokens at 0 (no reserved padding, every offset
+       collapses flush). The floating chrome is app-only; a phone browser uses a sticky in-flow header
+       instead, which needs no reserved space. `.has-pool-tab-bar` covers the floating bottom tab pill
+       (in-pool); `.has-floating-nav` covers the floating top switcher/avatar row (all app pages). Both
+       include the iOS safe-area insets so nothing hides behind the notch or home indicator. */
+    @media (max-width: 767px) and (display-mode: standalone) {
         .has-pool-tab-bar,
         .has-manage-tab-bar {
             --pool-tab-bar-h: calc(4.5rem + env(safe-area-inset-bottom, 0px));

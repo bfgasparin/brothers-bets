@@ -39,7 +39,7 @@ export function PoolTabBar() {
 
     return (
         <div
-            className="pointer-events-none fixed inset-x-0 bottom-0 z-40 flex justify-center px-3 md:hidden"
+            className="pointer-events-none fixed inset-x-0 bottom-0 z-40 flex justify-center px-3 md:hidden browser:hidden"
             style={{
                 paddingBottom:
                     'calc(0.25rem + env(safe-area-inset-bottom, 0px))',

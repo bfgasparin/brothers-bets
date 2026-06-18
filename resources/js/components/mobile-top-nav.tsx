@@ -54,7 +54,7 @@ export function MobileTopNav() {
 
     return (
         <div
-            className="floating-top-bar pointer-events-auto fixed inset-x-0 top-0 z-40 flex items-center justify-between gap-2 px-3 pb-2 shadow-[var(--sh-md)] md:hidden"
+            className="floating-top-bar pointer-events-auto fixed inset-x-0 top-0 z-40 flex items-center justify-between gap-2 px-3 pb-2 shadow-[var(--sh-md)] md:hidden browser:hidden"
             style={{
                 paddingTop: 'calc(0.5rem + env(safe-area-inset-top, 0px))',
             }}

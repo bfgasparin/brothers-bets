@@ -5,6 +5,7 @@ import { AppSidebar } from '@/components/app-sidebar';
 import { AppSidebarHeader } from '@/components/app-sidebar-header';
 import { InstallBanner } from '@/components/install-banner';
 import { ManageTabBar } from '@/components/manage-tab-bar';
+import { MobileBrowserTopNav } from '@/components/mobile-browser-top-nav';
 import { MobileTopNav } from '@/components/mobile-top-nav';
 import { manageSlugFromUrl } from '@/components/nav-manage';
 import { NavigationIndicator } from '@/components/navigation-indicator';
@@ -36,6 +37,7 @@ export default function AppSidebarLayout({
                 )}
             >
                 <AppSidebarHeader breadcrumbs={breadcrumbs} />
+                <MobileBrowserTopNav />
                 {children}
                 <MobileTopNav />
                 <NavigationIndicator />

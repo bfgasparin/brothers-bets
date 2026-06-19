@@ -346,7 +346,7 @@ class WorldCup2026Seeder extends Seeder
                 // No override: the group lock derives from the first group kickoff (minus the
                 // buffer); each knockout round locks the buffer before its own first kickoff.
                 'predictions_lock_at' => null,
-                'entry_price' => 37.00,
+                'entry_price' => 30.00,
                 'currency' => 'BRL',
                 // No house cut — the whole buy-in goes into the pot ("100% to players").
                 'house_fee_percentage' => 0.00,

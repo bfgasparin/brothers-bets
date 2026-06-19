@@ -293,7 +293,7 @@ class WorldCup2026SeederTest extends TestCase
 
         // A cheaper buy-in, no house fee (the whole pot goes to players), and a flatter 50/30/20
         // split so 2nd and 3rd are worth chasing.
-        $this->assertSame('37.00', $pool->entry_price);
+        $this->assertSame('30.00', $pool->entry_price);
         $this->assertSame('0.00', $pool->house_fee_percentage);
         $this->assertSame(
             [50, 30, 20],

@@ -163,18 +163,14 @@ function playersLabel(card: MatchdayCard, t: Translator['t']): string {
         : t(':count players', { count: card.count });
 }
 
-/** A tie-card's leaders as detail-dialog rows, with each value formatted for display. */
-function detailPlayers(
-    card: MatchdayCard,
-    formatValue: (value: number) => string,
-): StatDetailPlayer[] {
+/** A tie-card's leaders as detail-dialog rows. */
+function detailPlayers(card: MatchdayCard): StatDetailPlayer[] {
     return card.leaders.map((leader) => ({
         id: leader.entry_id,
         name: leader.name,
         initials: leader.initials,
         avatar: leader.avatar,
         isMe: leader.is_me,
-        valueText: formatValue(leader.value),
     }));
 }
 
@@ -207,10 +203,10 @@ function MatchdayStatCard({
     const [open, setOpen] = useState(false);
 
     const header = (
-        <div className="flex items-center gap-2 text-xs font-bold tracking-[0.12em] text-muted-foreground uppercase">
+        <div className="flex min-w-0 items-center gap-2 pr-6 text-xs font-bold tracking-[0.12em] text-muted-foreground uppercase">
             <Icon
                 className={cn(
-                    'size-4',
+                    'size-4 shrink-0',
                     tone === 'gold' && 'text-accent',
                     tone === 'green' && 'text-primary',
                     tone === 'muted' && 'text-muted-foreground',
@@ -240,9 +236,9 @@ function MatchdayStatCard({
             >
                 {header}
                 <CardChevron />
-                <div className="mt-3 flex items-center gap-3">
-                    <AvatarStack players={stackPlayers(card)} />
-                    <div className="min-w-0">
+                <div className="mt-3 flex min-w-0 items-center gap-3">
+                    <AvatarStack players={stackPlayers(card)} size="sm" />
+                    <div className="min-w-0 flex-1">
                         <div className="font-display text-2xl leading-none font-semibold text-foreground tabular-nums">
                             +{card.leaders[0].value}
                         </div>
@@ -262,7 +258,7 @@ function MatchdayStatCard({
                 title={title}
                 explanation={explanation}
                 summary={`${playersLabel(card, t)} · +${card.leaders[0].value} ${statLabel}`}
-                players={detailPlayers(card, (value) => `+${value}`)}
+                players={detailPlayers(card)}
             />
         </>
     );
@@ -291,10 +287,10 @@ function MoverCard({
         value === 1 ? t('1 place') : t(':count places', { count: value });
 
     const header = (
-        <div className="flex items-center gap-1.5 text-xs font-bold tracking-[0.12em] text-muted-foreground uppercase">
+        <div className="flex min-w-0 items-center gap-1.5 pr-6 text-xs font-bold tracking-[0.12em] text-muted-foreground uppercase">
             <Icon
                 className={cn(
-                    'size-4',
+                    'size-4 shrink-0',
                     up ? 'text-primary' : 'text-destructive',
                 )}
             />
@@ -322,9 +318,9 @@ function MoverCard({
             >
                 {header}
                 <CardChevron />
-                <div className="mt-3 flex items-center gap-2.5">
-                    <AvatarStack players={stackPlayers(card)} />
-                    <div className="min-w-0">
+                <div className="mt-3 flex min-w-0 items-center gap-2.5">
+                    <AvatarStack players={stackPlayers(card)} size="sm" />
+                    <div className="min-w-0 flex-1">
                         <div className="truncate text-sm font-semibold text-foreground">
                             {playersLabel(card, t)}
                         </div>
@@ -348,7 +344,7 @@ function MoverCard({
                 title={title}
                 explanation={explanation}
                 summary={`${playersLabel(card, t)} · ${placesLabel(card.leaders[0].value)}`}
-                players={detailPlayers(card, placesLabel)}
+                players={detailPlayers(card)}
             />
         </>
     );

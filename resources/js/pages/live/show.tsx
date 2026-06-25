@@ -660,8 +660,8 @@ function MoverCard({
     const [open, setOpen] = useState(false);
 
     const heading = (
-        <span className="inline-flex items-center gap-1.5 text-[0.7rem] font-bold tracking-[0.12em] text-muted-foreground uppercase">
-            <Icon className={cn('size-3.5', toneClassName)} />
+        <span className="inline-flex min-w-0 items-center gap-1.5 pr-6 text-[0.7rem] font-bold tracking-[0.12em] text-muted-foreground uppercase">
+            <Icon className={cn('size-3.5 shrink-0', toneClassName)} />
             {title}
         </span>
     );
@@ -690,7 +690,6 @@ function MoverCard({
         initials: row.initials,
         avatar: row.avatar,
         isMe: row.user_id === meId,
-        valueText: format(result.value),
     }));
 
     return (
@@ -702,8 +701,9 @@ function MoverCard({
             >
                 {heading}
                 <ChevronRight className="absolute top-3 right-3 size-4 text-muted-foreground/50 transition-colors group-hover:text-accent" />
-                <div className="flex items-center gap-3">
+                <div className="flex min-w-0 items-center gap-3">
                     <AvatarStack
+                        size="sm"
                         players={result.leaders.map((row) => ({
                             id: row.entry_id,
                             name: row.name,
@@ -712,13 +712,13 @@ function MoverCard({
                             isMe: row.user_id === meId,
                         }))}
                     />
-                    <div className="min-w-0">
+                    <div className="min-w-0 flex-1">
                         <p className="truncate font-display font-semibold">
                             {playersLabel}
                         </p>
                         <p
                             className={cn(
-                                'font-display text-sm font-semibold tabular-nums',
+                                'truncate font-display text-sm font-semibold tabular-nums',
                                 toneClassName,
                             )}
                         >

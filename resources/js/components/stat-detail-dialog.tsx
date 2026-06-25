@@ -16,8 +16,6 @@ export interface StatDetailPlayer {
     initials: string;
     avatar: string | null;
     isMe: boolean;
-    /** The player's metric, already formatted for display (e.g. "+12 pts", "3 places"). */
-    valueText: string;
 }
 
 type Tone = 'gold' | 'green' | 'muted' | 'destructive';
@@ -58,9 +56,11 @@ export default function StatDetailDialog({
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent className="sm:max-w-md">
-                <DialogHeader>
-                    <DialogTitle className="flex items-center justify-center gap-2 font-display sm:justify-start">
-                        <Icon className={cn('size-5', TONE_CLASS[tone])} />
+                <DialogHeader className="text-left">
+                    <DialogTitle className="flex items-center gap-2 font-display">
+                        <Icon
+                            className={cn('size-5 shrink-0', TONE_CLASS[tone])}
+                        />
                         {title}
                     </DialogTitle>
                     <DialogDescription>{explanation}</DialogDescription>
@@ -97,9 +97,6 @@ export default function StatDetailDialog({
                             />
                             <span className="min-w-0 flex-1 truncate font-display font-semibold text-foreground">
                                 {player.name}
-                            </span>
-                            <span className="shrink-0 font-display text-sm font-semibold text-foreground tabular-nums">
-                                {player.valueText}
                             </span>
                         </li>
                     ))}

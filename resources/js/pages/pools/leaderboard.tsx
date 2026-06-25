@@ -236,7 +236,7 @@ function MatchdayStatCard({
             <button
                 type="button"
                 onClick={() => setOpen(true)}
-                className="press-soft card-elevated group relative w-full cursor-pointer rounded-2xl border border-border bg-card p-4 text-left transition hover:border-accent/60"
+                className="press-soft card-elevated group relative w-full rounded-2xl border border-border bg-card p-4 text-left transition hover:border-accent/60"
             >
                 {header}
                 <CardChevron />
@@ -318,7 +318,7 @@ function MoverCard({
             <button
                 type="button"
                 onClick={() => setOpen(true)}
-                className="press-soft card-elevated group relative w-full cursor-pointer rounded-2xl border border-border bg-card p-4 text-left transition hover:border-accent/60"
+                className="press-soft card-elevated group relative w-full rounded-2xl border border-border bg-card p-4 text-left transition hover:border-accent/60"
             >
                 {header}
                 <CardChevron />

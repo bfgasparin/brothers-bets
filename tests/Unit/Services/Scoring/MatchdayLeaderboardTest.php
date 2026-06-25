@@ -101,6 +101,34 @@ class MatchdayLeaderboardTest extends TestCase
         $this->assertSame($this->rival->id, $stats['lowest']['leaders'][0]['entry_id']);
     }
 
+    public function test_every_tied_leader_is_reported_not_just_the_first_three(): void
+    {
+        // Three twins join Me at the top, making a four-way tie — more than the avatar stack shows.
+        $twins = collect(['Twin A', 'Twin B', 'Twin C'])->map(function (string $name): Entry {
+            $twin = Entry::factory()->for($this->pool)->for(User::factory()->create(['name' => $name]))->create();
+            $this->predictAllGroups($twin, $this->tournament, $this->seedOrderScores());
+
+            return $twin;
+        });
+
+        $this->recordMatchdayResults($this->tournament, 'group-1', $this->seedOrderScores());
+        (new ScoreEngine)->recompute($this->pool);
+
+        $stats = $this->board(
+            $this->builder->build($this->pool, $this->me->user_id, null),
+            'overall',
+        )['matchday_stats'];
+
+        // The full tie is carried — count and the leaders list both hold all four, not a slice of three.
+        $this->assertSame(4, $stats['top']['count']);
+        $this->assertCount(4, $stats['top']['leaders']);
+        $topIds = array_column($stats['top']['leaders'], 'entry_id');
+        $this->assertContains($this->me->id, $topIds);
+        foreach ($twins as $twin) {
+            $this->assertContains($twin->id, $topIds);
+        }
+    }
+
     public function test_a_past_matchday_is_frozen_at_its_own_end(): void
     {
         // Settle matchday 1, then matchday 2; both played out in seed order.

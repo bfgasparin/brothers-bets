@@ -11,6 +11,7 @@ import {
     Trophy,
     Users,
 } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import { useState } from 'react';
 import { AvatarStack } from '@/components/avatar-stack';
 import { formatMatchDate } from '@/components/fixtures';
@@ -18,6 +19,8 @@ import { LeaderboardStandings } from '@/components/leaderboard-standings';
 import { PersonalMovement } from '@/components/personal-movement';
 import PlayerAvatar from '@/components/player-avatar';
 import { PoolIdentity } from '@/components/pool-identity';
+import StatDetailDialog from '@/components/stat-detail-dialog';
+import type { StatDetailPlayer } from '@/components/stat-detail-dialog';
 import { SegmentedTabs } from '@/components/ui/segmented-tabs';
 import { useDisplayTimeZone } from '@/hooks/use-timezone';
 import type { Translator } from '@/hooks/use-translation';
@@ -160,9 +163,32 @@ function playersLabel(card: MatchdayCard, t: Translator['t']): string {
         : t(':count players', { count: card.count });
 }
 
+/** A tie-card's leaders as detail-dialog rows, with each value formatted for display. */
+function detailPlayers(
+    card: MatchdayCard,
+    formatValue: (value: number) => string,
+): StatDetailPlayer[] {
+    return card.leaders.map((leader) => ({
+        id: leader.entry_id,
+        name: leader.name,
+        initials: leader.initials,
+        avatar: leader.avatar,
+        isMe: leader.is_me,
+        valueText: formatValue(leader.value),
+    }));
+}
+
+/** The muted corner glyph hinting a stat card is tappable; brightens with the card's hover state. */
+function CardChevron() {
+    return (
+        <ChevronRight className="absolute top-3 right-3 size-4 text-muted-foreground/50 transition-colors group-hover:text-accent" />
+    );
+}
+
 /** One of the three per-matchday cards (you earned / top earner / lowest earner). Tie-aware. */
 function MatchdayStatCard({
     title,
+    explanation,
     icon: Icon,
     tone,
     card,
@@ -170,29 +196,50 @@ function MatchdayStatCard({
     showName,
 }: {
     title: string;
-    icon: typeof Crown;
+    explanation: string;
+    icon: LucideIcon;
     tone: 'gold' | 'green' | 'muted';
     card: MatchdayCard | null;
     statLabel: string;
     showName: boolean;
 }) {
     const { t } = useTranslation();
+    const [open, setOpen] = useState(false);
+
+    const header = (
+        <div className="flex items-center gap-2 text-xs font-bold tracking-[0.12em] text-muted-foreground uppercase">
+            <Icon
+                className={cn(
+                    'size-4',
+                    tone === 'gold' && 'text-accent',
+                    tone === 'green' && 'text-primary',
+                    tone === 'muted' && 'text-muted-foreground',
+                )}
+            />
+            {title}
+        </div>
+    );
+
+    if (!card) {
+        return (
+            <div className="card-elevated rounded-2xl border border-border bg-card p-4">
+                {header}
+                <p className="mt-3 text-sm text-muted-foreground">
+                    {t('Not started')}
+                </p>
+            </div>
+        );
+    }
 
     return (
-        <div className="card-elevated rounded-2xl border border-border bg-card p-4">
-            <div className="flex items-center gap-2 text-xs font-bold tracking-[0.12em] text-muted-foreground uppercase">
-                <Icon
-                    className={cn(
-                        'size-4',
-                        tone === 'gold' && 'text-accent',
-                        tone === 'green' && 'text-primary',
-                        tone === 'muted' && 'text-muted-foreground',
-                    )}
-                />
-                {title}
-            </div>
-
-            {card ? (
+        <>
+            <button
+                type="button"
+                onClick={() => setOpen(true)}
+                className="press-soft card-elevated group relative w-full cursor-pointer rounded-2xl border border-border bg-card p-4 text-left transition hover:border-accent/60"
+            >
+                {header}
+                <CardChevron />
                 <div className="mt-3 flex items-center gap-3">
                     <AvatarStack players={stackPlayers(card)} />
                     <div className="min-w-0">
@@ -206,12 +253,18 @@ function MatchdayStatCard({
                         </div>
                     </div>
                 </div>
-            ) : (
-                <p className="mt-3 text-sm text-muted-foreground">
-                    {t('Not started')}
-                </p>
-            )}
-        </div>
+            </button>
+            <StatDetailDialog
+                open={open}
+                onOpenChange={setOpen}
+                icon={Icon}
+                tone={tone}
+                title={title}
+                explanation={explanation}
+                summary={`${playersLabel(card, t)} · +${card.leaders[0].value} ${statLabel}`}
+                players={detailPlayers(card, (value) => `+${value}`)}
+            />
+        </>
     );
 }
 
@@ -221,30 +274,54 @@ function MatchdayStatCard({
  */
 function MoverCard({
     title,
+    explanation,
     direction,
     card,
 }: {
     title: string;
+    explanation: string;
     direction: 'up' | 'down';
     card: MatchdayCard | null;
 }) {
     const { t } = useTranslation();
+    const [open, setOpen] = useState(false);
     const up = direction === 'up';
     const Icon = up ? ArrowUp : ArrowDown;
+    const placesLabel = (value: number): string =>
+        value === 1 ? t('1 place') : t(':count places', { count: value });
+
+    const header = (
+        <div className="flex items-center gap-1.5 text-xs font-bold tracking-[0.12em] text-muted-foreground uppercase">
+            <Icon
+                className={cn(
+                    'size-4',
+                    up ? 'text-primary' : 'text-destructive',
+                )}
+            />
+            {title}
+        </div>
+    );
+
+    if (!card) {
+        return (
+            <div className="card-elevated rounded-2xl border border-border bg-card p-4">
+                {header}
+                <p className="mt-3 text-sm text-muted-foreground">
+                    {t('No movement')}
+                </p>
+            </div>
+        );
+    }
 
     return (
-        <div className="card-elevated rounded-2xl border border-border bg-card p-4">
-            <div className="flex items-center gap-1.5 text-xs font-bold tracking-[0.12em] text-muted-foreground uppercase">
-                <Icon
-                    className={cn(
-                        'size-4',
-                        up ? 'text-primary' : 'text-destructive',
-                    )}
-                />
-                {title}
-            </div>
-
-            {card ? (
+        <>
+            <button
+                type="button"
+                onClick={() => setOpen(true)}
+                className="press-soft card-elevated group relative w-full cursor-pointer rounded-2xl border border-border bg-card p-4 text-left transition hover:border-accent/60"
+            >
+                {header}
+                <CardChevron />
                 <div className="mt-3 flex items-center gap-2.5">
                     <AvatarStack players={stackPlayers(card)} />
                     <div className="min-w-0">
@@ -258,20 +335,22 @@ function MoverCard({
                             )}
                         >
                             <Icon className="size-3.5" />
-                            {card.leaders[0].value === 1
-                                ? t('1 place')
-                                : t(':count places', {
-                                      count: card.leaders[0].value,
-                                  })}
+                            {placesLabel(card.leaders[0].value)}
                         </div>
                     </div>
                 </div>
-            ) : (
-                <p className="mt-3 text-sm text-muted-foreground">
-                    {t('No movement')}
-                </p>
-            )}
-        </div>
+            </button>
+            <StatDetailDialog
+                open={open}
+                onOpenChange={setOpen}
+                icon={Icon}
+                tone={up ? 'green' : 'destructive'}
+                title={title}
+                explanation={explanation}
+                summary={`${playersLabel(card, t)} · ${placesLabel(card.leaders[0].value)}`}
+                players={detailPlayers(card, placesLabel)}
+            />
+        </>
     );
 }
 
@@ -490,6 +569,9 @@ export default function Leaderboard({
                         <div className="grid flex-1 grid-cols-2 gap-3">
                             <MatchdayStatCard
                                 title={t('Top of the matchday')}
+                                explanation={t(
+                                    'Earned the most on this board over the matchday.',
+                                )}
                                 icon={Crown}
                                 tone="gold"
                                 card={cards.top}
@@ -498,6 +580,9 @@ export default function Leaderboard({
                             />
                             <MatchdayStatCard
                                 title={t('Quietest matchday')}
+                                explanation={t(
+                                    'Earned the least on this board over the matchday.',
+                                )}
                                 icon={TrendingDown}
                                 tone="muted"
                                 card={cards.lowest}
@@ -506,11 +591,17 @@ export default function Leaderboard({
                             />
                             <MoverCard
                                 title={t('Biggest climber')}
+                                explanation={t(
+                                    'Climbed the most places on the board this matchday.',
+                                )}
                                 direction="up"
                                 card={cards.biggest_climber}
                             />
                             <MoverCard
                                 title={t('Biggest faller')}
+                                explanation={t(
+                                    'Fell the most places on the board this matchday.',
+                                )}
                                 direction="down"
                                 card={cards.biggest_faller}
                             />

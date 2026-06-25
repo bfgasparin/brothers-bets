@@ -4,6 +4,7 @@ import {
     ArrowUp,
     Check,
     ChevronDown,
+    ChevronRight,
     Crown,
     Radio,
     TrendingDown,
@@ -19,6 +20,8 @@ import { PersonalMovement } from '@/components/personal-movement';
 import PlayerAvatar from '@/components/player-avatar';
 import { PoolIdentity } from '@/components/pool-identity';
 import { StandingsList } from '@/components/standings-list';
+import StatDetailDialog from '@/components/stat-detail-dialog';
+import type { StatDetailPlayer } from '@/components/stat-detail-dialog';
 import {
     Dialog,
     DialogContent,
@@ -634,7 +637,9 @@ function pickLeaders(
  */
 function MoverCard({
     title,
+    explanation,
     icon: Icon,
+    tone,
     toneClassName,
     result,
     format,
@@ -642,7 +647,9 @@ function MoverCard({
     meId,
 }: {
     title: string;
+    explanation: string;
     icon: LucideIcon;
+    tone: 'gold' | 'green' | 'muted' | 'destructive';
     toneClassName: string;
     result: { leaders: ProjectedRow[]; value: number } | null;
     format: (value: number) => string;
@@ -650,15 +657,51 @@ function MoverCard({
     meId: number;
 }) {
     const { t, tChoice } = useTranslation();
+    const [open, setOpen] = useState(false);
+
+    const heading = (
+        <span className="inline-flex items-center gap-1.5 text-[0.7rem] font-bold tracking-[0.12em] text-muted-foreground uppercase">
+            <Icon className={cn('size-3.5', toneClassName)} />
+            {title}
+        </span>
+    );
+
+    if (!result) {
+        return (
+            <div className="card-elevated flex flex-col gap-3 rounded-2xl border border-border bg-card p-4">
+                {heading}
+                <p className="text-sm text-muted-foreground">
+                    {emptyLabel ?? t('No movement yet')}
+                </p>
+            </div>
+        );
+    }
+
+    const playersLabel =
+        result.leaders.length === 1
+            ? result.leaders[0].user_id === meId
+                ? t('You')
+                : result.leaders[0].name
+            : tChoice(':count player|:count players', result.leaders.length);
+
+    const players: StatDetailPlayer[] = result.leaders.map((row) => ({
+        id: row.entry_id,
+        name: row.user_id === meId ? t('You') : row.name,
+        initials: row.initials,
+        avatar: row.avatar,
+        isMe: row.user_id === meId,
+        valueText: format(result.value),
+    }));
 
     return (
-        <div className="card-elevated flex flex-col gap-3 rounded-2xl border border-border bg-card p-4">
-            <span className="inline-flex items-center gap-1.5 text-[0.7rem] font-bold tracking-[0.12em] text-muted-foreground uppercase">
-                <Icon className={cn('size-3.5', toneClassName)} />
-                {title}
-            </span>
-
-            {result ? (
+        <>
+            <button
+                type="button"
+                onClick={() => setOpen(true)}
+                className="press-soft card-elevated group relative flex w-full cursor-pointer flex-col gap-3 rounded-2xl border border-border bg-card p-4 text-left transition hover:border-accent/60"
+            >
+                {heading}
+                <ChevronRight className="absolute top-3 right-3 size-4 text-muted-foreground/50 transition-colors group-hover:text-accent" />
                 <div className="flex items-center gap-3">
                     <AvatarStack
                         players={result.leaders.map((row) => ({
@@ -671,14 +714,7 @@ function MoverCard({
                     />
                     <div className="min-w-0">
                         <p className="truncate font-display font-semibold">
-                            {result.leaders.length === 1
-                                ? result.leaders[0].user_id === meId
-                                    ? t('You')
-                                    : result.leaders[0].name
-                                : tChoice(
-                                      ':count player|:count players',
-                                      result.leaders.length,
-                                  )}
+                            {playersLabel}
                         </p>
                         <p
                             className={cn(
@@ -690,12 +726,18 @@ function MoverCard({
                         </p>
                     </div>
                 </div>
-            ) : (
-                <p className="text-sm text-muted-foreground">
-                    {emptyLabel ?? t('No movement yet')}
-                </p>
-            )}
-        </div>
+            </button>
+            <StatDetailDialog
+                open={open}
+                onOpenChange={setOpen}
+                icon={Icon}
+                tone={tone}
+                title={title}
+                explanation={explanation}
+                summary={`${playersLabel} · ${format(result.value)}`}
+                players={players}
+            />
+        </>
     );
 }
 
@@ -741,7 +783,11 @@ function LiveMovers({
         <div className={cn('grid grid-cols-2 gap-3', className)}>
             <MoverCard
                 title={t('Top earner')}
+                explanation={t(
+                    'Gaining the most points from the matches in play right now.',
+                )}
                 icon={Crown}
+                tone="gold"
                 toneClassName="text-accent"
                 result={topEarner}
                 format={(value) => `+${value} ${label}`}
@@ -750,7 +796,11 @@ function LiveMovers({
             />
             <MoverCard
                 title={t('Quietest')}
+                explanation={t(
+                    'Gaining the fewest points from the matches in play right now.',
+                )}
                 icon={TrendingDown}
+                tone="muted"
                 toneClassName="text-muted-foreground"
                 result={quietest}
                 format={(value) => `+${value} ${label}`}
@@ -759,7 +809,11 @@ function LiveMovers({
             />
             <MoverCard
                 title={t('Biggest climber')}
+                explanation={t(
+                    'Climbing the most places against the official standings.',
+                )}
                 icon={ArrowUp}
+                tone="green"
                 toneClassName="text-primary"
                 result={climber}
                 format={(value) =>
@@ -769,7 +823,11 @@ function LiveMovers({
             />
             <MoverCard
                 title={t('Biggest faller')}
+                explanation={t(
+                    'Falling the most places against the official standings.',
+                )}
                 icon={ArrowDown}
+                tone="destructive"
                 toneClassName="text-destructive"
                 result={faller}
                 format={(value) =>

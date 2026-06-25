@@ -321,9 +321,9 @@ export interface MatchdayStat {
 }
 
 /**
- * A tie-aware matchday card: up to three tied leaders (for the avatar stack) plus the true count of
- * everyone who shares the top value/delta. A unique leader has `count === 1`; all leaders share the
- * same `value`.
+ * A tie-aware matchday card: every tied leader (the avatar stack slices to three; the detail dialog
+ * lists them all) plus their count. A unique leader has `count === 1`; all leaders share the same
+ * `value`.
  */
 export interface MatchdayCard {
     leaders: MatchdayStat[];

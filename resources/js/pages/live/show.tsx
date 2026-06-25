@@ -698,7 +698,7 @@ function MoverCard({
             <button
                 type="button"
                 onClick={() => setOpen(true)}
-                className="press-soft card-elevated group relative flex w-full cursor-pointer flex-col gap-3 rounded-2xl border border-border bg-card p-4 text-left transition hover:border-accent/60"
+                className="press-soft card-elevated group relative flex w-full flex-col gap-3 rounded-2xl border border-border bg-card p-4 text-left transition hover:border-accent/60"
             >
                 {heading}
                 <ChevronRight className="absolute top-3 right-3 size-4 text-muted-foreground/50 transition-colors group-hover:text-accent" />

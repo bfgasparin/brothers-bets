@@ -292,8 +292,8 @@ class MatchdayLeaderboard
     }
 
     /**
-     * A tie-aware card: up to three leaders for the avatar stack plus the true count of everyone who
-     * shares the top value/delta.
+     * A tie-aware card: every leader who shares the top value/delta, in display order, plus their count.
+     * The avatar stack slices to three on the client; the full list feeds the card's detail dialog.
      *
      * @param  list<array<string, mixed>>  $leaders  built stat dicts, in display order
      * @return array{leaders: list<array<string, mixed>>, count: int}
@@ -301,7 +301,7 @@ class MatchdayLeaderboard
     private function card(array $leaders): array
     {
         return [
-            'leaders' => array_slice($leaders, 0, 3),
+            'leaders' => $leaders,
             'count' => count($leaders),
         ];
     }

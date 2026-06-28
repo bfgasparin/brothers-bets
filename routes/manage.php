@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\EntryCopyController;
 use App\Http\Controllers\EntryImportController;
 use App\Http\Controllers\FixtureScheduleController;
 use App\Http\Controllers\LiveControlController;
@@ -44,4 +45,12 @@ Route::middleware(['auth', 'can:manage-tournament'])->prefix('manage')->name('ma
     Route::get('{tournament:slug}/backfill', [EntryImportController::class, 'create'])->name('backfill.create');
     Route::post('{tournament:slug}/backfill/preview', [EntryImportController::class, 'preview'])->name('backfill.preview');
     Route::post('{tournament:slug}/backfill', [EntryImportController::class, 'commit'])->name('backfill.commit');
+
+    // Copy predictions: bulk-import several players' predictions from one pool into a sibling pool of
+    // the same tournament (e.g. an upfront pool into a phased/rolling one). Group scorelines always
+    // copy; the knockout copies only between pools of the same bracket shape. Pick the pools, choose
+    // whom to import, then commit and re-score the destination once. Bypasses the prediction lock.
+    Route::get('{tournament:slug}/copy-predictions', [EntryCopyController::class, 'create'])->name('copy.create');
+    Route::post('{tournament:slug}/copy-predictions/preview', [EntryCopyController::class, 'preview'])->name('copy.preview');
+    Route::post('{tournament:slug}/copy-predictions', [EntryCopyController::class, 'commit'])->name('copy.commit');
 });

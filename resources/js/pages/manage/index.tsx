@@ -1,5 +1,6 @@
 import { Head, Link } from '@inertiajs/react';
 import {
+    ArrowRightLeft,
     CalendarClock,
     ChevronRight,
     ClipboardCheck,
@@ -144,6 +145,15 @@ export default function ManageIndex({ tournaments }: ManageIndexProps) {
                                             }
                                             icon={Upload}
                                             label={t('Backfill predictions')}
+                                        />
+                                        <AdminAction
+                                            href={
+                                                manage.copy.create(
+                                                    tournament.slug,
+                                                ).url
+                                            }
+                                            icon={ArrowRightLeft}
+                                            label={t('Copy predictions')}
                                         />
                                     </div>
                                 </div>

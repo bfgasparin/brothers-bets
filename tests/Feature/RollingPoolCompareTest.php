@@ -31,7 +31,7 @@ class RollingPoolCompareTest extends TestCase
 
         $this->seed(WorldCup2026Seeder::class);
         $this->tournament = Tournament::firstOrFail();
-        // A distinct slug from the seeded rolling pool (world-cup-2026-rolling) to avoid a collision.
+        // A distinct slug from the seeded rolling pool (world-cup-2026-brothers-2) to avoid a collision.
         $this->pool = Pool::factory()->rollingBracket()->create([
             'tournament_id' => $this->tournament->id,
             'slug' => 'rolling-compare',

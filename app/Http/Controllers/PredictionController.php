@@ -112,11 +112,11 @@ class PredictionController extends Controller
                 'scoring_config' => $pool->scoring_config,
             ],
             'groups' => $tournament->groups->map(
-                fn (Group $group): array => $this->mapGroup($group, $bracket, $groupPredictions, $teamsById, $pool->predictsKnockoutBracket(), $fixtureMatchdays),
+                fn (Group $group): array => $this->mapGroup($group, $pool, $bracket, $groupPredictions, $teamsById, $pool->predictsKnockoutBracket(), $fixtureMatchdays),
             )->all(),
             'bracket' => $pool->predictsKnockoutBracket()
-                ? $this->mapBracket($tournament->knockoutFixtures, $bracket, $knockoutPredictions, $teamsById, $windows)
-                : $this->mapOfficialBracket($tournament->knockoutFixtures, $knockoutPredictions, $teamsById, $windows),
+                ? $this->mapBracket($pool, $tournament->knockoutFixtures, $bracket, $knockoutPredictions, $teamsById, $windows)
+                : $this->mapOfficialBracket($pool, $tournament->knockoutFixtures, $knockoutPredictions, $teamsById, $windows),
             'thirds' => $pool->predictsKnockoutBracket() ? $this->mapThirds($bracket, $teamsById) : null,
             'thirds_tie' => $this->mapThirdsTie($pool, $bracket, $tournament, $teamsById, $entry !== null ? ManualTieOrdering::fromEntry($entry)->thirds : null),
             // Sibling pools the user can copy predictions from, and whether to nudge them to do so.
@@ -140,7 +140,9 @@ class PredictionController extends Controller
         $entry = $request->entry();
 
         DB::transaction(function () use ($entry, $request): void {
-            foreach ($request->validated('predictions') as $prediction) {
+            // For a per-match pool this is filtered to the matches still open at save time; other
+            // strategies gate the whole stage in the request, so every submitted score is kept.
+            foreach ($request->predictionsForPersistence() as $prediction) {
                 GroupPrediction::updateOrCreate(
                     ['entry_id' => $entry->id, 'fixture_id' => $prediction['fixture_id']],
                     ['home_goals' => $prediction['home_goals'], 'away_goals' => $prediction['away_goals']],
@@ -270,8 +272,12 @@ class PredictionController extends Controller
      * @param  array<int, array{key: string, label: string, short_label: string, kind: string}>  $fixtureMatchdays
      * @return array<string, mixed>
      */
-    private function mapGroup(Group $group, ResolvedBracket $bracket, Collection $predictions, Collection $teamsById, bool $surfaceTies, array $fixtureMatchdays): array
+    private function mapGroup(Group $group, Pool $pool, ResolvedBracket $bracket, Collection $predictions, Collection $teamsById, bool $surfaceTies, array $fixtureMatchdays): array
     {
+        // A per-match (rolling) pool locks each match at its own kickoff; every other strategy
+        // shares the single group-stage lock. The frontend ticks its own clock against this instant.
+        $perMatch = $pool->usesPerMatchPredictionWindows();
+        $poolLockIso = $pool->predictionsLockAt()?->toIso8601String();
         $standings = $bracket->standings[$group->name];
 
         // Phased pools can't reorder a standings tie (their bracket is official) and show no resolve
@@ -292,7 +298,7 @@ class PredictionController extends Controller
                 ...$this->teamRef($team),
                 'position' => $team->pivot->position,
             ])->all(),
-            'fixtures' => $group->fixtures->map(function (Fixture $fixture) use ($predictions, $teamsById, $fixtureMatchdays): array {
+            'fixtures' => $group->fixtures->map(function (Fixture $fixture) use ($predictions, $teamsById, $fixtureMatchdays, $perMatch, $poolLockIso): array {
                 $prediction = $predictions->get($fixture->id);
 
                 return [
@@ -304,6 +310,7 @@ class PredictionController extends Controller
                     'home_goals' => $prediction?->home_goals,
                     'away_goals' => $prediction?->away_goals,
                     'kicks_off_at' => $fixture->kicks_off_at?->toIso8601String(),
+                    'predictions_lock_at' => $perMatch ? $fixture->predictionsLockAt()?->toIso8601String() : $poolLockIso,
                     'venue' => $fixture->venue,
                     'venue_timezone' => $fixture->venue_timezone,
                 ];
@@ -378,8 +385,10 @@ class PredictionController extends Controller
      * @param  array<string, PredictionWindowStatus>  $windows
      * @return list<array<string, mixed>>
      */
-    private function mapBracket(Collection $fixtures, ResolvedBracket $bracket, Collection $predictions, Collection $teamsById, array $windows): array
+    private function mapBracket(Pool $pool, Collection $fixtures, ResolvedBracket $bracket, Collection $predictions, Collection $teamsById, array $windows): array
     {
+        $perMatch = $pool->usesPerMatchPredictionWindows();
+
         return $fixtures
             ->groupBy(fn (Fixture $fixture): string => $fixture->phase->key->value)
             ->map(fn (Collection $phaseFixtures): array => [
@@ -387,7 +396,7 @@ class PredictionController extends Controller
                 'phase_name' => $phaseFixtures->first()->phase->name,
                 'sort_order' => $phaseFixtures->first()->phase->sort_order,
                 'window' => ($windows[$phaseFixtures->first()->phase->key->value] ?? PredictionWindowStatus::Locked)->value,
-                'fixtures' => $phaseFixtures->map(function (Fixture $fixture) use ($bracket, $predictions, $teamsById): array {
+                'fixtures' => $phaseFixtures->map(function (Fixture $fixture) use ($bracket, $predictions, $teamsById, $perMatch): array {
                     $slot = $bracket->fixture($fixture->id);
                     $prediction = $predictions->get($fixture->id);
 
@@ -406,6 +415,8 @@ class PredictionController extends Controller
                         'home_goals' => $prediction?->home_goals,
                         'away_goals' => $prediction?->away_goals,
                         'advancing_team_id' => $prediction?->advancing_team_id,
+                        'kicks_off_at' => $fixture->kicks_off_at?->toIso8601String(),
+                        'predictions_lock_at' => $perMatch ? $fixture->predictionsLockAt()?->toIso8601String() : null,
                     ];
                 })->values()->all(),
             ])
@@ -426,8 +437,10 @@ class PredictionController extends Controller
      * @param  array<string, PredictionWindowStatus>  $windows
      * @return list<array<string, mixed>>
      */
-    private function mapOfficialBracket(Collection $fixtures, Collection $predictions, Collection $teamsById, array $windows): array
+    private function mapOfficialBracket(Pool $pool, Collection $fixtures, Collection $predictions, Collection $teamsById, array $windows): array
     {
+        $perMatch = $pool->usesPerMatchPredictionWindows();
+
         return $fixtures
             ->groupBy(fn (Fixture $fixture): string => $fixture->phase->key->value)
             ->map(fn (Collection $phaseFixtures): array => [
@@ -435,7 +448,7 @@ class PredictionController extends Controller
                 'phase_name' => $phaseFixtures->first()->phase->name,
                 'sort_order' => $phaseFixtures->first()->phase->sort_order,
                 'window' => ($windows[$phaseFixtures->first()->phase->key->value] ?? PredictionWindowStatus::Pending)->value,
-                'fixtures' => $phaseFixtures->map(function (Fixture $fixture) use ($predictions, $teamsById): array {
+                'fixtures' => $phaseFixtures->map(function (Fixture $fixture) use ($predictions, $teamsById, $perMatch): array {
                     $prediction = $predictions->get($fixture->id);
 
                     $home = $fixture->home_team_id !== null ? $teamsById->get($fixture->home_team_id) : null;
@@ -453,6 +466,8 @@ class PredictionController extends Controller
                         'home_goals' => $prediction?->home_goals,
                         'away_goals' => $prediction?->away_goals,
                         'advancing_team_id' => $prediction?->advancing_team_id,
+                        'kicks_off_at' => $fixture->kicks_off_at?->toIso8601String(),
+                        'predictions_lock_at' => $perMatch ? $fixture->predictionsLockAt()?->toIso8601String() : null,
                     ];
                 })->values()->all(),
             ])

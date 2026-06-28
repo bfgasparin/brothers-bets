@@ -20,7 +20,9 @@ class UpdateKnockoutPredictionsRequest extends PredictionRequest
 
     /**
      * Phased-bracket pools lock per knockout round, so a save is only authorised when every
-     * submitted fixture's round is currently open. Upfront pools keep the single pool-level lock.
+     * submitted fixture's round is currently open. Upfront pools keep the single pool-level lock,
+     * and per-match (rolling) pools authorise at the pool level then filter locked/pending fixtures
+     * out of the persisted set {@see predictionsForPersistence()} — a single match can lock mid-batch.
      */
     public function authorize(): bool
     {
@@ -74,8 +76,15 @@ class UpdateKnockoutPredictionsRequest extends PredictionRequest
     {
         $validator->after(function (Validator $validator): void {
             $resolved = $this->resolvedSlots();
+            $openFixtureIds = $this->openKnockoutFixtureIds();
 
             foreach ((array) $this->input('predictions', []) as $index => $prediction) {
+                // A per-match pool silently drops fixtures that have since locked or aren't open yet,
+                // so a stale locked draw must not fail the whole save — skip non-open fixtures here.
+                if ($openFixtureIds !== null && ! in_array((int) ($prediction['fixture_id'] ?? 0), $openFixtureIds, true)) {
+                    continue;
+                }
+
                 $home = $this->goal($prediction['home_goals'] ?? null);
                 $away = $this->goal($prediction['away_goals'] ?? null);
 
@@ -108,6 +117,8 @@ class UpdateKnockoutPredictionsRequest extends PredictionRequest
     public function predictionsForPersistence(): array
     {
         $resolved = $this->resolvedSlots();
+        $fixturesById = $this->pool()->tournament->knockoutFixtures()->with('phase')->get()->keyBy('id');
+        $predictions = $this->openPredictions($this->validated('predictions'), $fixturesById);
 
         return array_map(function (array $prediction) use ($resolved): array {
             $home = $this->goal($prediction['home_goals'] ?? null);
@@ -120,7 +131,28 @@ class UpdateKnockoutPredictionsRequest extends PredictionRequest
                 'away_goals' => $away,
                 'advancing_team_id' => $this->advancingFor($home, $away, $slot, $prediction['advancing_team_id'] ?? null),
             ];
-        }, $this->validated('predictions'));
+        }, $predictions);
+    }
+
+    /**
+     * The ids of the submitted knockout fixtures that are currently open, for a per-match pool —
+     * used to skip locked/pending fixtures during validation. Null for other strategies, whose
+     * whole round is gated in {@see authorize()} so every submitted fixture is validated.
+     *
+     * @return list<int>|null
+     */
+    private function openKnockoutFixtureIds(): ?array
+    {
+        if (! $this->pool()->usesPerMatchPredictionWindows()) {
+            return null;
+        }
+
+        $fixturesById = $this->pool()->tournament->knockoutFixtures()->with('phase')->get()->keyBy('id');
+
+        return array_map(
+            static fn (array $prediction): int => (int) $prediction['fixture_id'],
+            $this->openPredictions((array) $this->input('predictions', []), $fixturesById),
+        );
     }
 
     /**
@@ -160,9 +192,9 @@ class UpdateKnockoutPredictionsRequest extends PredictionRequest
             return $this->resolvedSlots;
         }
 
-        // Phased brackets are predicted against the official participants already on the fixtures;
-        // upfront brackets resolve from the player's own group scores via the engine.
-        if ($this->pool()->usesPhasedPredictionWindows()) {
+        // Phased and rolling brackets are predicted against the official participants already on the
+        // fixtures; upfront brackets resolve from the player's own group scores via the engine.
+        if ($this->pool()->predictsOfficialBracket()) {
             return $this->resolvedSlots = $this->pool()->tournament->knockoutFixtures()->get()
                 ->mapWithKeys(fn ($fixture): array => [
                     $fixture->id => ['home' => $fixture->home_team_id, 'away' => $fixture->away_team_id],

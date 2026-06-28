@@ -48,9 +48,16 @@ class PredictionImporter
         $openInBoth = $this->openPhasesInBoth($destination, $sourcePool);
         $knockoutPhases = array_values(array_diff($openInBoth, [PhaseKey::Group->value]));
 
-        DB::transaction(function () use ($destination, $destinationEntry, $sourceEntry, $openInBoth, $knockoutPhases): void {
+        // A per-match destination locks each fixture at its own kickoff, so a phase can be "open"
+        // overall while some of its matches have already locked (and may be scored). Clamp the
+        // clean-replace to only the fixtures still open, so a locked pick is never wiped.
+        $openFixtureIds = $destination->usesPerMatchPredictionWindows()
+            ? $this->openDestinationFixtureIds($destination)
+            : null;
+
+        DB::transaction(function () use ($destination, $destinationEntry, $sourceEntry, $openInBoth, $knockoutPhases, $openFixtureIds): void {
             if (in_array(PhaseKey::Group->value, $openInBoth, true)) {
-                $this->importGroupStage($destinationEntry, $sourceEntry);
+                $this->importGroupStage($destinationEntry, $sourceEntry, $openFixtureIds);
             }
 
             // Upfront pools derive the knockout bracket from the imported group scores; cascade so
@@ -60,7 +67,7 @@ class PredictionImporter
             }
 
             if ($knockoutPhases !== []) {
-                $this->importKnockoutPhases($destination, $destinationEntry, $sourceEntry, $knockoutPhases);
+                $this->importKnockoutPhases($destination, $destinationEntry, $sourceEntry, $knockoutPhases, $openFixtureIds);
 
                 // Re-cascade an upfront bracket so the copied advancing picks are validated against
                 // the resolved slots and flow downstream to a fixed point.
@@ -158,6 +165,32 @@ class PredictionImporter
     }
 
     /**
+     * The ids of every fixture currently open (per fixture) in a rolling destination — the set the
+     * clean-replace is clamped to, so a match that has locked (and may be scored) is never wiped.
+     *
+     * @return list<int>
+     */
+    private function openDestinationFixtureIds(Pool $destination): array
+    {
+        $tournament = $destination->tournament;
+        $ids = [];
+
+        foreach ($tournament->groupFixtures()->get() as $fixture) {
+            if ($this->windowResolver->statusForFixture($destination, $fixture) === PredictionWindowStatus::Open) {
+                $ids[] = $fixture->id;
+            }
+        }
+
+        foreach ($tournament->knockoutFixtures()->with('phase')->get() as $fixture) {
+            if ($this->windowResolver->statusForFixture($destination, $fixture) === PredictionWindowStatus::Open) {
+                $ids[] = $fixture->id;
+            }
+        }
+
+        return $ids;
+    }
+
+    /**
      * The phase keys that are {@see PredictionWindowStatus::Open} in both pools right now.
      *
      * @return list<string>
@@ -178,18 +211,33 @@ class PredictionImporter
      * Clean-replace the destination's group scores and tie orderings with the source's. Group
      * predictions only exist where a score was entered, so this copies exactly the user's picks.
      */
-    private function importGroupStage(Entry $destinationEntry, Entry $sourceEntry): void
+    private function importGroupStage(Entry $destinationEntry, Entry $sourceEntry, ?array $openFixtureIds): void
     {
-        $destinationEntry->groupPredictions()->delete();
-        $destinationEntry->groupOrderings()->delete();
+        // A per-match destination only replaces the matches still open; otherwise the whole stage is
+        // clean-replaced (and tie orderings copied, which only matter for the upfront cascade).
+        if ($openFixtureIds !== null) {
+            $destinationEntry->groupPredictions()->whereIn('fixture_id', $openFixtureIds)->delete();
 
-        foreach ($sourceEntry->groupPredictions()->get() as $prediction) {
+            $sourcePredictions = $sourceEntry->groupPredictions()->whereIn('fixture_id', $openFixtureIds)->get();
+        } else {
+            $destinationEntry->groupPredictions()->delete();
+            $destinationEntry->groupOrderings()->delete();
+
+            $sourcePredictions = $sourceEntry->groupPredictions()->get();
+        }
+
+        foreach ($sourcePredictions as $prediction) {
             GroupPrediction::create([
                 'entry_id' => $destinationEntry->id,
                 'fixture_id' => $prediction->fixture_id,
                 'home_goals' => $prediction->home_goals,
                 'away_goals' => $prediction->away_goals,
             ]);
+        }
+
+        // A per-match pool predicts the official bracket, so it has no group tie orderings to copy.
+        if ($openFixtureIds !== null) {
+            return;
         }
 
         // Tie orderings are keyed by tournament structure (group + team ids), identical across
@@ -216,11 +264,14 @@ class PredictionImporter
      * cascade {@see BracketResolver::persist()}.
      *
      * @param  list<string>  $phaseKeys
+     * @param  list<int>|null  $openFixtureIds  for a per-match destination, the fixtures still open
      */
-    private function importKnockoutPhases(Pool $destination, Entry $destinationEntry, Entry $sourceEntry, array $phaseKeys): void
+    private function importKnockoutPhases(Pool $destination, Entry $destinationEntry, Entry $sourceEntry, array $phaseKeys, ?array $openFixtureIds): void
     {
         $fixtures = $destination->tournament->knockoutFixtures()->with('phase')->get()
-            ->filter(fn ($fixture): bool => in_array($fixture->phase->key->value, $phaseKeys, true));
+            ->filter(fn ($fixture): bool => in_array($fixture->phase->key->value, $phaseKeys, true))
+            // A per-match destination clamps to the matches still open, so a locked pick is untouched.
+            ->filter(fn ($fixture): bool => $openFixtureIds === null || in_array($fixture->id, $openFixtureIds, true));
 
         $sourcePicks = $sourceEntry->knockoutPredictions()->get()->keyBy('fixture_id');
 

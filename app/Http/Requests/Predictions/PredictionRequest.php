@@ -2,9 +2,13 @@
 
 namespace App\Http\Requests\Predictions;
 
+use App\Enums\PredictionWindowStatus;
 use App\Models\Entry;
+use App\Models\Fixture;
 use App\Models\Pool;
+use App\Services\Predictions\PredictionWindowResolver;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Support\Collection;
 
 /**
  * Shared base for the prediction save requests: authorises against the pool's prediction lock
@@ -21,15 +25,53 @@ abstract class PredictionRequest extends FormRequest
 
     public function authorize(): bool
     {
-        if ($this->user() === null
-            || ! $this->pool()->acceptsPredictions()
-            || ! $this->pool()->isJoinedBy($this->user())) {
+        $user = $this->user();
+        $pool = $this->pool();
+
+        if ($user === null || ! $pool->isJoinedBy($user)) {
             return false;
         }
 
         // An organizer-authored bracket must never be re-derived by a player save (every save path
         // re-runs the cascade). The wizard already blocks these entries; reject direct posts too.
-        return ! ($this->existingEntry()?->hasAuthoredBracket() ?? false);
+        if ($this->existingEntry()?->hasAuthoredBracket() ?? false) {
+            return false;
+        }
+
+        // A per-match pool gates each fixture individually at save time — locked fixtures are
+        // filtered out via {@see openPredictions()} rather than rejecting the whole save (a single
+        // match can lock mid-batch). Every other strategy locks the whole pool/round at once.
+        if ($pool->usesPerMatchPredictionWindows()) {
+            return true;
+        }
+
+        return $pool->acceptsPredictions();
+    }
+
+    /**
+     * For a per-match pool, keep only the submitted predictions whose fixture is currently open
+     * (judged by the server clock); other strategies gate the whole pool/round in {@see authorize()},
+     * so every submitted prediction is kept. Defends against a stale client saving a match that has
+     * since locked.
+     *
+     * @param  list<array<string, mixed>>  $predictions
+     * @param  Collection<int, Fixture>  $fixturesById
+     * @return list<array<string, mixed>>
+     */
+    protected function openPredictions(array $predictions, Collection $fixturesById): array
+    {
+        if (! $this->pool()->usesPerMatchPredictionWindows()) {
+            return array_values($predictions);
+        }
+
+        $resolver = app(PredictionWindowResolver::class);
+
+        return array_values(array_filter($predictions, function (array $prediction) use ($resolver, $fixturesById): bool {
+            $fixture = $fixturesById->get($prediction['fixture_id'] ?? null);
+
+            return $fixture !== null
+                && $resolver->statusForFixture($this->pool(), $fixture) === PredictionWindowStatus::Open;
+        }));
     }
 
     /**

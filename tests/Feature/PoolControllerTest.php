@@ -52,14 +52,16 @@ class PoolControllerTest extends TestCase
             ->assertOk()
             ->assertInertia(fn (AssertableInertia $page) => $page
                 ->component('pools/index')
-                ->has('pools.data', 2)
+                ->has('pools.data', 3)
                 ->where('pools.data.0.slug', 'world-cup-2026-ffa')
                 ->where('pools.data.1.slug', 'world-cup-2026-brothers')
-                // Both pools are played over the one tournament, so each carries its shared
+                ->where('pools.data.2.slug', 'world-cup-2026-rolling')
+                // All pools are played over the one tournament, so each carries its shared
                 // identity plus a stable, distinct accent position used to tell them apart.
                 ->where('pools.data.0.tournament.name', 'World Cup 2026')
                 ->where('pools.data.0.accent_index', 0)
                 ->where('pools.data.1.accent_index', 1)
+                ->where('pools.data.2.accent_index', 2)
                 // Each pool also carries its own stored accent colour, distinct per sibling.
                 ->where('pools.data.0.source', 'Wagner Figueiredo')
                 ->where('pools.data.0.accent', 'pitch')
@@ -67,9 +69,11 @@ class PoolControllerTest extends TestCase
                 ->where('pools.data.1.name', 'Bolão dos Brothers - Copa')
                 ->where('pools.data.1.source', 'Bruno Gasparin')
                 ->where('pools.data.1.accent', 'teal')
+                ->where('pools.data.2.name', 'Bolão dos Brothers 2 - Copa')
+                ->where('pools.data.2.accent', 'violet')
                 ->where('pools.current_page', 1)
                 ->where('pools.last_page', 1)
-                ->where('pools.total', 2)
+                ->where('pools.total', 3)
             );
     }
 

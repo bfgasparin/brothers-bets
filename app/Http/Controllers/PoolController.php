@@ -118,7 +118,7 @@ class PoolController extends Controller
                     'joined' => (bool) $pool->joined,
                     // Whether joining is still open — the card shows the buy-in and percentage prize
                     // split while joinable, then switches to the now-final raw prize amounts.
-                    'can_join' => $pool->acceptsPredictions(),
+                    'can_join' => $pool->acceptsJoins(),
                     // The buy-in and the prizes computed from the current pool size, so a player can
                     // weigh the stakes before opening the pool.
                     'pricing' => PrizePot::forPool($pool, $pool->entries_count)->toArray(),

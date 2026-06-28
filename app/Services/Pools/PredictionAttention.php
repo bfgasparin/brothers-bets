@@ -8,6 +8,7 @@ use App\Enums\PredictionWindowStatus;
 use App\Enums\TournamentStatus;
 use App\Http\Controllers\PoolController;
 use App\Models\Entry;
+use App\Models\Fixture;
 use App\Models\Pool;
 use App\Services\Predictions\PredictionWindowResolver;
 use App\Services\Predictions\TieResolutionState;
@@ -90,6 +91,10 @@ class PredictionAttention
             return new AttentionSummary(false);
         }
 
+        if ($pool->usesPerMatchPredictionWindows()) {
+            return $this->perMatchSummary($pool, $entry);
+        }
+
         return $pool->usesPhasedPredictionWindows()
             ? $this->phasedSummary($pool, $entry)
             : $this->upfrontSummary($pool, $entry);
@@ -106,6 +111,10 @@ class PredictionAttention
      */
     private function openWindows(Pool $pool): array
     {
+        if ($pool->usesPerMatchPredictionWindows()) {
+            return $this->perMatchOpenWindows($pool);
+        }
+
         if (! $pool->usesPhasedPredictionWindows()) {
             if (! $pool->acceptsPredictions()) {
                 return [];
@@ -142,6 +151,151 @@ class PredictionAttention
                     ];
                 }
             }
+        }
+
+        return $windows;
+    }
+
+    /**
+     * Rolling (per-match) pools open the group stage from creation and each knockout round as its
+     * participants are projected, but lock each match at its own kickoff. Outstanding work is any
+     * match that is still open AND unpredicted — a match that has kicked off without a pick is no
+     * longer actionable, so it never nags. Group matches collapse to one "Group stage" line; each
+     * open knockout round contributes its own line.
+     */
+    private function perMatchSummary(Pool $pool, Entry $entry): AttentionSummary
+    {
+        $windows = [];
+
+        if (($group = $this->perMatchGroupWindow($pool, $entry)) !== null) {
+            $windows[] = $group;
+        }
+
+        // Knockout rounds can only be open once the group stage has produced official results.
+        if ($pool->tournament->status !== TournamentStatus::Upcoming) {
+            $windows = [...$windows, ...$this->perMatchKnockoutWindows($pool, $entry)];
+        }
+
+        return new AttentionSummary($windows !== [], $windows);
+    }
+
+    /**
+     * The "Group stage" attention line for a rolling pool: the matches still open (not yet kicked
+     * off) that the player has not predicted, or null when every open group match has a score. The
+     * deadline is the next group kickoff — the next match to lock.
+     *
+     * @return array{phase_key: string, label: string, deadline: ?string, missing_count: int, total_count: int, has_unresolved_ties: bool}|null
+     */
+    private function perMatchGroupWindow(Pool $pool, Entry $entry): ?array
+    {
+        $openFixtures = $pool->tournament->groupFixtures()->get()
+            ->filter(fn (Fixture $fixture): bool => $fixture->acceptsPredictions());
+
+        if ($openFixtures->isEmpty()) {
+            return null;
+        }
+
+        $predicted = $entry->groupPredictions()
+            ->whereNotNull('home_goals')
+            ->whereNotNull('away_goals')
+            ->pluck('fixture_id')
+            ->all();
+
+        $missing = $openFixtures->reject(fn (Fixture $fixture): bool => in_array($fixture->id, $predicted, true));
+
+        if ($missing->isEmpty()) {
+            return null;
+        }
+
+        return [
+            'phase_key' => PhaseKey::Group->value,
+            'label' => 'Group stage',
+            'deadline' => $openFixtures->min('kicks_off_at')?->toIso8601String(),
+            'missing_count' => $missing->count(),
+            'total_count' => $openFixtures->count(),
+            'has_unresolved_ties' => false,
+        ];
+    }
+
+    /**
+     * The open knockout rounds of a rolling pool with unfinished picks, each as a window line. Open
+     * is judged per fixture (a knockout match opens once its own participants are projected and locks
+     * at its kickoff); a pick is complete only when both goals are set.
+     *
+     * @return list<array{phase_key: string, label: string, deadline: ?string, missing_count: int, total_count: int, has_unresolved_ties: bool}>
+     */
+    private function perMatchKnockoutWindows(Pool $pool, Entry $entry): array
+    {
+        $entry->loadMissing('knockoutPredictions');
+        $predictions = $entry->knockoutPredictions->keyBy('fixture_id');
+
+        $tournament = $pool->tournament;
+        $tournament->load(['phases' => fn ($query) => $query->orderBy('sort_order'), 'phases.fixtures']);
+
+        $windows = [];
+
+        foreach ($tournament->phases as $phase) {
+            if ($phase->type !== PhaseType::Knockout) {
+                continue;
+            }
+
+            $open = $phase->fixtures->filter(
+                fn (Fixture $fixture): bool => $this->windowResolver->statusForFixture($pool, $fixture) === PredictionWindowStatus::Open,
+            );
+
+            if ($open->isEmpty()) {
+                continue;
+            }
+
+            $missing = $open->filter(function (Fixture $fixture) use ($predictions): bool {
+                $prediction = $predictions->get($fixture->id);
+
+                return $prediction === null || $prediction->home_goals === null || $prediction->away_goals === null;
+            });
+
+            if ($missing->isNotEmpty()) {
+                $windows[] = [
+                    'phase_key' => $phase->key->value,
+                    'label' => $phase->name,
+                    'deadline' => $open->min('kicks_off_at')?->toIso8601String(),
+                    'missing_count' => $missing->count(),
+                    'total_count' => $open->count(),
+                    'has_unresolved_ties' => false,
+                ];
+            }
+        }
+
+        return $windows;
+    }
+
+    /**
+     * The currently-open windows of a rolling pool (independent of completeness), for the predict
+     * page's "all set" celebration: the group stage while any group match is open, plus each knockout
+     * round with an open match. Deadline is the next match in that window to lock.
+     *
+     * @return list<array{phase_key: string, label: string, deadline: ?string}>
+     */
+    private function perMatchOpenWindows(Pool $pool): array
+    {
+        $tournament = $pool->tournament;
+        $tournament->load(['phases' => fn ($query) => $query->orderBy('sort_order'), 'phases.fixtures']);
+
+        $windows = [];
+
+        foreach ($tournament->phases as $phase) {
+            $open = $phase->fixtures->filter(
+                fn (Fixture $fixture): bool => $this->windowResolver->statusForFixture($pool, $fixture) === PredictionWindowStatus::Open,
+            );
+
+            if ($open->isEmpty()) {
+                continue;
+            }
+
+            $windows[] = [
+                'phase_key' => $phase->key->value,
+                'label' => $phase->type === PhaseType::Group ? 'Group stage' : $phase->name,
+                'deadline' => $open->min('kicks_off_at')?->toIso8601String(),
+            ];
         }
 
         return $windows;

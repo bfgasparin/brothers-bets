@@ -30,7 +30,10 @@ class WindowOpeningNotifier
      */
     public function notifyOpenedRounds(Pool $pool, array $before): void
     {
-        if (! $pool->usesPhasedPredictionWindows()) {
+        // Both phased and rolling (per-match) pools predict the official bracket round by round, so
+        // each knockout round opens once its participants are projected. A per-match pool still emits
+        // one "round open" email per round (matches lock per fixture, but the round opens together).
+        if (! $pool->predictsOfficialBracket()) {
             return;
         }
 

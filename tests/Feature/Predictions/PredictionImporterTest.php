@@ -253,6 +253,148 @@ class PredictionImporterTest extends TestCase
         $this->assertFalse((new PredictionImporter)->shouldSuggest($destination, $this->user));
     }
 
+    public function test_the_admin_bypass_copies_a_closed_group_window_the_open_window_import_skips(): void
+    {
+        // Locks in the past → every prediction window is shut.
+        $source = $this->upfrontPool(now()->subDay());
+        $sourceEntry = $this->join($source);
+        $this->predictAllGroups($sourceEntry, $this->tournament, $this->seedOrderScores());
+
+        // The open-window import transfers nothing: neither pool has an open phase.
+        $openDestination = $this->upfrontPool(now()->subDay());
+        $openEntry = Entry::factory()->for($openDestination)->for($this->user)->create();
+        (new PredictionImporter)->import($openEntry, $source);
+        $this->assertSame(0, $openEntry->groupPredictions()->count());
+
+        // The admin bypass copies the full group stage despite the closed lock.
+        $bypassDestination = $this->upfrontPool(now()->subDay());
+        $bypassEntry = Entry::factory()->for($bypassDestination)->for($this->user)->create();
+        $this->assertTrue((new PredictionImporter)->importAllCompatible($bypassEntry, $source));
+        $this->assertSame(72, $bypassEntry->groupPredictions()->count());
+    }
+
+    public function test_the_admin_bypass_reproduces_an_upfront_sources_full_bracket_through_closed_windows(): void
+    {
+        $source = $this->upfrontPool(now()->subDay());
+        $destination = $this->upfrontPool(now()->subDay());
+
+        $sourceEntry = $this->join($source);
+        $destinationEntry = Entry::factory()->for($destination)->for($this->user)->create();
+
+        $this->predictAllGroups($sourceEntry, $this->tournament, $this->seedOrderScores());
+        $this->advanceAllHome($sourceEntry, new BracketResolver);
+
+        $this->assertTrue((new PredictionImporter)->importAllCompatible($destinationEntry, $source));
+
+        $final = $this->tournament->knockoutFixtures()
+            ->whereRelation('phase', 'key', PhaseKey::Final->value)->firstOrFail();
+        $sourceChampion = $sourceEntry->knockoutPredictions()->where('fixture_id', $final->id)->value('advancing_team_id');
+        $destinationChampion = $destinationEntry->knockoutPredictions()->where('fixture_id', $final->id)->value('advancing_team_id');
+
+        $this->assertNotNull($sourceChampion);
+        $this->assertSame($sourceChampion, $destinationChampion);
+    }
+
+    public function test_the_admin_bypass_copies_group_only_from_an_upfront_source_into_an_official_bracket_destination(): void
+    {
+        $source = $this->upfrontPool(now()->subDay());
+        $sourceEntry = $this->join($source);
+        $this->predictAllGroups($sourceEntry, $this->tournament, $this->seedOrderScores());
+        $this->advanceAllHome($sourceEntry, new BracketResolver);
+
+        // A self-derived upfront bracket can't map onto an official knockout — both an official
+        // (phased) and a per-match (rolling) destination take the group stage only.
+        foreach ([$this->phasedPool(now()->subDay()), $this->rollingPool(now()->subDay())] as $destination) {
+            $destinationEntry = Entry::factory()->for($destination)->for($this->user)->create();
+
+            $this->assertTrue((new PredictionImporter)->importAllCompatible($destinationEntry, $source));
+
+            $this->assertSame(72, $destinationEntry->groupPredictions()->count());
+            $this->assertSame(0, $destinationEntry->knockoutPredictions()
+                ->where(fn ($query) => $query->whereNotNull('home_goals')->orWhereNotNull('advancing_team_id'))
+                ->count());
+        }
+    }
+
+    public function test_the_admin_bypass_copies_an_official_knockout_round_between_two_phased_pools_through_a_closed_window(): void
+    {
+        $this->projectRoundOf32();
+        $this->setPhaseKickoff(PhaseKey::RoundOf32, now()->subDay()); // teams known, window shut
+
+        $source = $this->phasedPool(now()->subDay());
+        $destination = $this->phasedPool(now()->subDay());
+        $sourceEntry = $this->join($source);
+        $destinationEntry = Entry::factory()->for($destination)->for($this->user)->create();
+
+        $this->fillRoundOf32($sourceEntry);
+
+        $this->assertTrue((new PredictionImporter)->importAllCompatible($destinationEntry, $source));
+
+        $r32 = $this->tournament->knockoutFixtures()
+            ->whereRelation('phase', 'key', PhaseKey::RoundOf32->value)->firstOrFail()->fresh();
+
+        $this->assertDatabaseHas('knockout_predictions', [
+            'entry_id' => $destinationEntry->id,
+            'fixture_id' => $r32->id,
+            'home_goals' => 2,
+            'away_goals' => 1,
+            'advancing_team_id' => $r32->home_team_id,
+            'predicted_home_team_id' => $r32->home_team_id,
+            'predicted_away_team_id' => $r32->away_team_id,
+        ]);
+
+        // Only the predicted round travels (the source filled R32 only), with official participants.
+        $this->assertSame(16, $destinationEntry->knockoutPredictions()->count());
+    }
+
+    public function test_the_admin_bypass_is_a_noop_without_a_source_entry(): void
+    {
+        $source = $this->upfrontPool(now()->subDay());
+        $destination = $this->upfrontPool(now()->subDay());
+        $destinationEntry = $this->join($destination); // the user never joined the source
+
+        $this->assertFalse((new PredictionImporter)->importAllCompatible($destinationEntry, $source));
+        $this->assertSame(0, $destinationEntry->groupPredictions()->count());
+    }
+
+    public function test_the_admin_bypass_is_a_noop_when_the_source_has_no_predictions(): void
+    {
+        $source = $this->upfrontPool(now()->subDay());
+        $destination = $this->upfrontPool(now()->subDay());
+        $this->join($source); // joined the source, but predicted nothing
+        $destinationEntry = $this->join($destination);
+
+        $this->assertFalse((new PredictionImporter)->importAllCompatible($destinationEntry, $source));
+        $this->assertSame(0, $destinationEntry->groupPredictions()->count());
+    }
+
+    public function test_the_admin_bypass_clears_a_prior_authored_bracket_flag(): void
+    {
+        $source = $this->upfrontPool(now()->subDay());
+        $destination = $this->upfrontPool(now()->subDay());
+        $sourceEntry = $this->join($source);
+        $destinationEntry = $this->join($destination);
+        $destinationEntry->authored_bracket_at = now();
+        $destinationEntry->save();
+
+        $this->predictAllGroups($sourceEntry, $this->tournament, $this->seedOrderScores());
+
+        $this->assertTrue((new PredictionImporter)->importAllCompatible($destinationEntry, $source));
+        $this->assertNull($destinationEntry->refresh()->authored_bracket_at);
+    }
+
+    public function test_has_own_predictions_detects_real_picks_only(): void
+    {
+        $pool = $this->upfrontPool(now()->addWeek());
+        $entry = $this->join($pool);
+        $importer = new PredictionImporter;
+
+        $this->assertFalse($importer->hasOwnPredictions($entry));
+
+        $this->predictGroup($entry, $this->tournament, 'A', $this->seedOrderScores());
+        $this->assertTrue($importer->hasOwnPredictions($entry->refresh()));
+    }
+
     private function fillRoundOf32(Entry $entry): void
     {
         $fixtures = $this->tournament->knockoutFixtures()
@@ -282,6 +424,14 @@ class PredictionImporterTest extends TestCase
     private function phasedPool(\DateTimeInterface|string|null $lockAt): Pool
     {
         return Pool::factory()->phasedBracket()->create([
+            'tournament_id' => $this->tournament->id,
+            'predictions_lock_at' => $lockAt,
+        ]);
+    }
+
+    private function rollingPool(\DateTimeInterface|string|null $lockAt): Pool
+    {
+        return Pool::factory()->rollingBracket()->create([
             'tournament_id' => $this->tournament->id,
             'predictions_lock_at' => $lockAt,
         ]);

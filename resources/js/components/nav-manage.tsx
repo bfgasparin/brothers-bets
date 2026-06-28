@@ -1,4 +1,10 @@
-import { CalendarClock, ClipboardCheck, Radio, Upload } from 'lucide-react';
+import {
+    ArrowRightLeft,
+    CalendarClock,
+    ClipboardCheck,
+    Radio,
+    Upload,
+} from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import manage from '@/routes/manage';
 
@@ -35,6 +41,11 @@ export function manageNavItems(slug: string): ManageNavItem[] {
             href: manage.backfill.create(slug).url,
             icon: Upload,
         },
+        {
+            title: 'Copy',
+            href: manage.copy.create(slug).url,
+            icon: ArrowRightLeft,
+        },
     ];
 }
 
@@ -42,7 +53,7 @@ export function manageNavItems(slug: string): ManageNavItem[] {
 export function manageSlugFromUrl(url: string): string | null {
     return (
         url.match(
-            /^\/manage\/([^/?#]+)\/(?:live|scores|schedule|backfill)/,
+            /^\/manage\/([^/?#]+)\/(?:live|scores|schedule|backfill|copy-predictions)/,
         )?.[1] ?? null
     );
 }

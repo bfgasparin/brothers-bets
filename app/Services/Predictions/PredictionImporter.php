@@ -8,8 +8,10 @@ use App\Models\Entry;
 use App\Models\EntryGroupOrdering;
 use App\Models\GroupPrediction;
 use App\Models\KnockoutPrediction;
+use App\Models\Phase;
 use App\Models\Pool;
 use App\Models\User;
+use App\Services\Predictions\Import\PredictionJsonImporter;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\DB;
 
@@ -55,8 +57,91 @@ class PredictionImporter
             ? $this->openDestinationFixtureIds($destination)
             : null;
 
-        DB::transaction(function () use ($destination, $destinationEntry, $sourceEntry, $openInBoth, $knockoutPhases, $openFixtureIds): void {
-            if (in_array(PhaseKey::Group->value, $openInBoth, true)) {
+        $this->copyPredictions(
+            $destination,
+            $destinationEntry,
+            $sourceEntry,
+            in_array(PhaseKey::Group->value, $openInBoth, true),
+            $knockoutPhases,
+            $openFixtureIds,
+        );
+    }
+
+    /**
+     * Admin/bypass copy: ignore the prediction-window intersection and copy every phase the source
+     * has predictions for that is STRUCTURALLY compatible with the destination strategy. Used by the
+     * organizer tool that seeds one pool from a sibling pool of the same tournament, so it
+     * deliberately writes into closed/locked windows.
+     *
+     *  - Group stage: always copied (any two pools of a tournament share the same group fixtures).
+     *  - Knockout: only when the source and destination predict the SAME bracket shape — both
+     *    self-derived upfront, or both official (phased/rolling). A self-derived upfront bracket is
+     *    NEVER copied onto an official knockout, and vice-versa. An upfront destination still rebuilds
+     *    its own bracket from the copied group scores via the cascade.
+     *
+     * @return bool whether anything was copied — false (a no-op) when the user has no source entry or
+     *              the source holds no predictions, so a bulk run can count the players it skipped.
+     */
+    public function importAllCompatible(Entry $destinationEntry, Pool $sourcePool): bool
+    {
+        $destination = $destinationEntry->pool;
+        $sourceEntry = $sourcePool->entryFor($destinationEntry->user);
+
+        if ($sourceEntry === null) {
+            return false;
+        }
+
+        $copyGroup = $sourceEntry->groupPredictions()->exists();
+
+        // Knockout transfers only between pools of the same bracket shape; otherwise group only.
+        $knockoutPhases = $destination->predictsKnockoutBracket() === $sourcePool->predictsKnockoutBracket()
+            ? $this->sourceKnockoutPhasesToCopy($sourceEntry, $sourcePool, $destination)
+            : [];
+
+        if (! $copyGroup && $knockoutPhases === []) {
+            return false;
+        }
+
+        // null = no per-match clamp: the admin tool overwrites locked fixtures too.
+        $this->copyPredictions($destination, $destinationEntry, $sourceEntry, $copyGroup, $knockoutPhases, null);
+
+        // The copy always rebuilds in derive-mode; a destination left "authored" by a prior backfill
+        // must lose that flag, or its now-derived bracket would be wrongly frozen on the wizard.
+        if ($destinationEntry->authored_bracket_at !== null) {
+            $destinationEntry->forceFill(['authored_bracket_at' => null])->save();
+        }
+
+        return true;
+    }
+
+    /**
+     * Whether the entry already holds the user's own predictions — a bare derived knockout
+     * placeholder (participants but no score/advancing pick) does not count. Lets the admin copy
+     * tool decide whether a destination entry would be overwritten without injecting the heavier
+     * {@see PredictionJsonImporter::hasExistingPredictions()}.
+     */
+    public function hasOwnPredictions(Entry $entry): bool
+    {
+        return $entry->groupPredictions()->exists()
+            || $entry->knockoutPredictions()
+                ->where(fn (Builder $query) => $query->whereNotNull('home_goals')->orWhereNotNull('advancing_team_id'))
+                ->exists();
+    }
+
+    /**
+     * The shared write path for both {@see import()} (open-window intersection) and
+     * {@see importAllCompatible()} (admin bypass): clean-replace the group stage, cascade an upfront
+     * destination's bracket, then copy the knockout phases (re-cascading upfront). $openFixtureIds
+     * clamps a per-match destination's clean-replace to its still-open fixtures; null replaces the
+     * whole stage (the admin bypass deliberately writes into closed/locked fixtures).
+     *
+     * @param  list<string>  $knockoutPhaseKeys
+     * @param  list<int>|null  $openFixtureIds
+     */
+    private function copyPredictions(Pool $destination, Entry $destinationEntry, Entry $sourceEntry, bool $copyGroup, array $knockoutPhaseKeys, ?array $openFixtureIds): void
+    {
+        DB::transaction(function () use ($destination, $destinationEntry, $sourceEntry, $copyGroup, $knockoutPhaseKeys, $openFixtureIds): void {
+            if ($copyGroup) {
                 $this->importGroupStage($destinationEntry, $sourceEntry, $openFixtureIds);
             }
 
@@ -66,8 +151,8 @@ class PredictionImporter
                 $this->resolver->persist($destinationEntry);
             }
 
-            if ($knockoutPhases !== []) {
-                $this->importKnockoutPhases($destination, $destinationEntry, $sourceEntry, $knockoutPhases, $openFixtureIds);
+            if ($knockoutPhaseKeys !== []) {
+                $this->importKnockoutPhases($destination, $destinationEntry, $sourceEntry, $knockoutPhaseKeys, $openFixtureIds);
 
                 // Re-cascade an upfront bracket so the copied advancing picks are validated against
                 // the resolved slots and flow downstream to a fixed point.
@@ -76,6 +161,43 @@ class PredictionImporter
                 }
             }
         });
+    }
+
+    /**
+     * The knockout phase keys to bypass-copy: those the source entry actually predicted, and — for an
+     * official-bracket destination — only the rounds whose destination participants are already known
+     * (a phased/rolling round with un-projected slots would otherwise store null-participant rows). An
+     * upfront destination has no such constraint; its bracket is rebuilt from the copied group scores.
+     *
+     * @return list<string>
+     */
+    private function sourceKnockoutPhasesToCopy(Entry $sourceEntry, Pool $sourcePool, Pool $destination): array
+    {
+        $knockoutKeys = $sourcePool->tournament->phases()
+            ->where('key', '!=', PhaseKey::Group->value)
+            ->orderBy('sort_order')
+            ->get()
+            ->map(fn (Phase $phase): string => $phase->key->value)
+            ->all();
+
+        return array_values(array_filter(
+            $knockoutKeys,
+            fn (string $key): bool => $this->entryHasPredictionsInPhase($sourceEntry, $sourcePool, $key)
+                && ($destination->predictsKnockoutBracket() || $this->destinationParticipantsKnown($destination, $key)),
+        ));
+    }
+
+    /**
+     * Whether the destination's official knockout participants for a round are already filled in
+     * (projected from results) — so a bypass-copied pick lands on a real match-up, never null teams.
+     */
+    private function destinationParticipantsKnown(Pool $destination, string $phaseKey): bool
+    {
+        return $destination->tournament->knockoutFixtures()
+            ->whereRelation('phase', 'key', $phaseKey)
+            ->whereNotNull('home_team_id')
+            ->whereNotNull('away_team_id')
+            ->exists();
     }
 
     /**

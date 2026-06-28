@@ -5,6 +5,7 @@ namespace Tests\Unit\Services\Predictions;
 use App\Enums\PhaseKey;
 use App\Enums\PredictionWindowStatus;
 use App\Enums\ScoringStrategy;
+use App\Models\Fixture;
 use App\Models\Pool;
 use App\Models\Tournament;
 use App\Services\Predictions\OfficialBracketProjector;
@@ -48,6 +49,11 @@ class PredictionWindowResolverTest extends TestCase
     {
         $phase = $this->tournament->phases()->where('key', $key->value)->firstOrFail();
         $phase->fixtures()->update(['kicks_off_at' => $when]);
+    }
+
+    private function firstGroupFixture(): Fixture
+    {
+        return $this->tournament->groupFixtures()->orderBy('match_number')->firstOrFail();
     }
 
     public function test_upfront_pool_opens_every_phase_until_the_single_lock(): void
@@ -166,5 +172,76 @@ class PredictionWindowResolverTest extends TestCase
 
         $this->assertTrue($this->resolver->isOpen($pool, PhaseKey::Group));
         $this->assertFalse($this->resolver->isOpen($pool, PhaseKey::RoundOf32));
+    }
+
+    public function test_rolling_group_fixture_locks_at_its_own_kickoff(): void
+    {
+        $pool = $this->pool(ScoringStrategy::RollingBracket, null);
+        $fixture = $this->firstGroupFixture();
+
+        $fixture->update(['kicks_off_at' => now()->addHour()]);
+        $this->assertSame(
+            PredictionWindowStatus::Open,
+            $this->resolver->statusForFixture($pool, $fixture->fresh()),
+        );
+
+        $fixture->update(['kicks_off_at' => now()->subMinute()]);
+        $this->assertSame(
+            PredictionWindowStatus::Locked,
+            $this->resolver->statusForFixture($pool, $fixture->fresh()),
+        );
+    }
+
+    public function test_rolling_knockout_fixture_is_pending_until_its_teams_are_known(): void
+    {
+        $pool = $this->pool(ScoringStrategy::RollingBracket, null);
+        $fixture = $this->knockoutFixture($this->tournament, 'R32-1');
+        $fixture->update(['kicks_off_at' => now()->addDay()]);
+
+        // No participants yet → pending.
+        $this->assertSame(
+            PredictionWindowStatus::Pending,
+            $this->resolver->statusForFixture($pool, $fixture->fresh()),
+        );
+
+        // Real participants land + kickoff in the future → open.
+        $this->recordOfficialGroupResults($this->tournament, $this->seedOrderScores());
+        (new OfficialBracketProjector)->project($this->tournament);
+        $fixture->refresh();
+        $fixture->update(['kicks_off_at' => now()->addDay()]);
+        $this->assertSame(
+            PredictionWindowStatus::Open,
+            $this->resolver->statusForFixture($pool, $fixture->fresh()),
+        );
+
+        // Its own kickoff passes → locked, even though a sibling could still be open.
+        $fixture->update(['kicks_off_at' => now()->subMinute()]);
+        $this->assertSame(
+            PredictionWindowStatus::Locked,
+            $this->resolver->statusForFixture($pool, $fixture->fresh()),
+        );
+    }
+
+    public function test_rolling_group_stage_stays_open_while_any_match_still_accepts(): void
+    {
+        $pool = $this->pool(ScoringStrategy::RollingBracket, null);
+
+        // Lock the whole group stage in the past, then reopen a single late match.
+        $this->tournament->groupFixtures()->update(['kicks_off_at' => now()->subDay()]);
+        $this->assertSame(PredictionWindowStatus::Locked, $this->resolver->windows($pool)[PhaseKey::Group->value]);
+
+        $this->firstGroupFixture()->update(['kicks_off_at' => now()->addDay()]);
+        $this->assertSame(PredictionWindowStatus::Open, $this->resolver->windows($pool)[PhaseKey::Group->value]);
+    }
+
+    public function test_status_for_fixture_delegates_to_the_phase_window_for_non_rolling_pools(): void
+    {
+        // A phased pool locks per round, so every group fixture reports the single group window.
+        $pool = $this->pool(ScoringStrategy::PhasedBracket, now()->subDay());
+
+        $this->assertSame(
+            PredictionWindowStatus::Locked,
+            $this->resolver->statusForFixture($pool, $this->firstGroupFixture()),
+        );
     }
 }

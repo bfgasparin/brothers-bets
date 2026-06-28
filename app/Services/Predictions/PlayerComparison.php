@@ -56,6 +56,7 @@ class PlayerComparison
         ]);
 
         $phaseKeyByFixture = $this->phaseKeyByFixture($tournament);
+        $fixtureStatuses = $this->fixtureStatuses($pool, $tournament, $phaseKeyByFixture, $windows);
 
         $viewerEntry = $pool->entries()
             ->where('user_id', $viewerUserId)
@@ -70,10 +71,10 @@ class PlayerComparison
             ->sortBy(fn (Entry $entry): int => array_search($entry->id, $entryIds, true))
             ->values();
 
-        $players = [$this->player($viewerEntry, $tournament->groups, $phaseKeyByFixture, $windows, true, $pool)];
+        $players = [$this->player($viewerEntry, $tournament->groups, $phaseKeyByFixture, $windows, $fixtureStatuses, true, $pool)];
 
         foreach ($opponents as $opponent) {
-            $players[] = $this->player($opponent, $tournament->groups, $phaseKeyByFixture, $windows, false, $pool);
+            $players[] = $this->player($opponent, $tournament->groups, $phaseKeyByFixture, $windows, $fixtureStatuses, false, $pool);
         }
 
         return [
@@ -90,7 +91,7 @@ class PlayerComparison
      * @param  array<string, PredictionWindowStatus>  $windows
      * @return array<string, mixed>
      */
-    private function player(?Entry $entry, Collection $groups, array $phaseKeyByFixture, array $windows, bool $isViewer, Pool $pool): array
+    private function player(?Entry $entry, Collection $groups, array $phaseKeyByFixture, array $windows, array $fixtureStatuses, bool $isViewer, Pool $pool): array
     {
         $groupPredictions = $entry?->groupPredictions->keyBy('fixture_id') ?? collect();
         $knockoutPredictions = $entry?->knockoutPredictions->keyBy('fixture_id') ?? collect();
@@ -105,8 +106,8 @@ class PlayerComparison
             'total_points' => $entry?->total_points,
             'rank' => $entry?->rank,
             'boards' => $this->boards($entry),
-            'group_predictions' => $this->groupPredictionMap($groupPredictions, $phaseKeyByFixture, $windows, $isViewer),
-            'knockout_predictions' => $this->knockoutPredictionMap($knockoutPredictions, $phaseKeyByFixture, $windows, $isViewer, $pool),
+            'group_predictions' => $this->groupPredictionMap($groupPredictions, $fixtureStatuses, $isViewer),
+            'knockout_predictions' => $this->knockoutPredictionMap($knockoutPredictions, $fixtureStatuses, $isViewer, $pool),
             'projected_standings' => $this->projectedStandings($groups, $groupPredictions, $windows, $isViewer, $pool->predictsKnockoutBracket()),
         ];
     }
@@ -134,11 +135,10 @@ class PlayerComparison
      * The player's group-stage predictions keyed by fixture id, gated by the fixture's window.
      *
      * @param  Collection<int, GroupPrediction>  $predictions  keyed by fixture id
-     * @param  array<int, string>  $phaseKeyByFixture
-     * @param  array<string, PredictionWindowStatus>  $windows
+     * @param  array<int, PredictionWindowStatus>  $fixtureStatuses  fixture id => window status
      * @return array<int, array{home_goals: int, away_goals: int, points_awarded: ?int}>
      */
-    private function groupPredictionMap(Collection $predictions, array $phaseKeyByFixture, array $windows, bool $isViewer): array
+    private function groupPredictionMap(Collection $predictions, array $fixtureStatuses, bool $isViewer): array
     {
         $map = [];
 
@@ -147,7 +147,7 @@ class PlayerComparison
                 continue;
             }
 
-            if (! $this->revealed($isViewer, $phaseKeyByFixture[$fixtureId] ?? null, $windows)) {
+            if (! $this->revealedFixture($isViewer, $fixtureStatuses[$fixtureId] ?? null)) {
                 continue;
             }
 
@@ -166,17 +166,16 @@ class PlayerComparison
      * teams are exposed only for upfront-bracket pools (where they differ from the official ones).
      *
      * @param  Collection<int, KnockoutPrediction>  $predictions  keyed by fixture id
-     * @param  array<int, string>  $phaseKeyByFixture
-     * @param  array<string, PredictionWindowStatus>  $windows
+     * @param  array<int, PredictionWindowStatus>  $fixtureStatuses  fixture id => window status
      * @return array<int, array<string, mixed>>
      */
-    private function knockoutPredictionMap(Collection $predictions, array $phaseKeyByFixture, array $windows, bool $isViewer, Pool $pool): array
+    private function knockoutPredictionMap(Collection $predictions, array $fixtureStatuses, bool $isViewer, Pool $pool): array
     {
         $showTeams = $pool->predictsKnockoutBracket();
         $map = [];
 
         foreach ($predictions as $fixtureId => $prediction) {
-            if (! $this->revealed($isViewer, $phaseKeyByFixture[$fixtureId] ?? null, $windows)) {
+            if (! $this->revealedFixture($isViewer, $fixtureStatuses[$fixtureId] ?? null)) {
                 continue;
             }
 
@@ -260,6 +259,52 @@ class PlayerComparison
         }
 
         return ($windows[$phaseKey] ?? null) === PredictionWindowStatus::Locked;
+    }
+
+    /**
+     * Whether a player's prediction for a fixture may be shown, judged by that fixture's own window
+     * status: always for the viewer, otherwise only once the fixture has {@see PredictionWindowStatus::Locked}.
+     * This is the per-fixture reveal that lets a rolling pool expose a kicked-off match while a
+     * still-open sibling stays hidden.
+     */
+    private function revealedFixture(bool $isViewer, ?PredictionWindowStatus $status): bool
+    {
+        return $isViewer || $status === PredictionWindowStatus::Locked;
+    }
+
+    /**
+     * The prediction window status of every fixture, keyed by fixture id. A per-match (rolling) pool
+     * resolves each fixture on its own kickoff; every other strategy inherits its phase's window, so
+     * each fixture maps to its phase status — preserving the existing per-phase reveal behaviour.
+     *
+     * @param  array<int, string>  $phaseKeyByFixture
+     * @param  array<string, PredictionWindowStatus>  $windows
+     * @return array<int, PredictionWindowStatus>
+     */
+    private function fixtureStatuses(Pool $pool, Tournament $tournament, array $phaseKeyByFixture, array $windows): array
+    {
+        if (! $pool->usesPerMatchPredictionWindows()) {
+            $map = [];
+            foreach ($phaseKeyByFixture as $fixtureId => $phaseKey) {
+                $map[$fixtureId] = $windows[$phaseKey] ?? PredictionWindowStatus::Pending;
+            }
+
+            return $map;
+        }
+
+        $map = [];
+
+        foreach ($tournament->groups as $group) {
+            foreach ($group->fixtures as $fixture) {
+                $map[$fixture->id] = $this->windowResolver->statusForFixture($pool, $fixture);
+            }
+        }
+
+        foreach ($tournament->knockoutFixtures as $fixture) {
+            $map[$fixture->id] = $this->windowResolver->statusForFixture($pool, $fixture);
+        }
+
+        return $map;
     }
 
     /**

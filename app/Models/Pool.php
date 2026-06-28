@@ -89,6 +89,21 @@ class Pool extends Model
     }
 
     /**
+     * Whether a player can still join (enter) the pool. Joining follows the prediction window: for
+     * a single-lock pool that is {@see acceptsPredictions()} (before the group-stage lock); a
+     * per-match (rolling) pool stays joinable as long as any match is still open to predict, so a
+     * late joiner can still call the remaining games.
+     */
+    public function acceptsJoins(): bool
+    {
+        if ($this->usesPerMatchPredictionWindows()) {
+            return $this->tournament->fixtures()->where('kicks_off_at', '>', now())->exists();
+        }
+
+        return $this->acceptsPredictions();
+    }
+
+    /**
      * Whether players predict the whole knockout bracket upfront (teams included), as opposed to
      * a future between-phases model where knockout teams are known before they are predicted.
      * When true, a player's predicted knockout teams are worth surfacing so the per-team
@@ -109,6 +124,29 @@ class Pool extends Model
     public function usesPhasedPredictionWindows(): bool
     {
         return $this->scoring_strategy === ScoringStrategy::PhasedBracket;
+    }
+
+    /**
+     * Whether predictions lock per individual fixture (Rolling Predictions): every match stays open
+     * until its own kickoff, rather than the whole pool ({@see UpfrontBracket}) or a whole knockout
+     * round ({@see PhasedBracket}) locking together. This is the "lock per fixture" lever, kept
+     * distinct from {@see predictsOfficialBracket()} (the "where do knockout teams come from" lever),
+     * which rolling shares with phased.
+     */
+    public function usesPerMatchPredictionWindows(): bool
+    {
+        return $this->scoring_strategy === ScoringStrategy::RollingBracket;
+    }
+
+    /**
+     * Whether knockout participants come from the official results — filled onto the fixtures by
+     * {@see OfficialBracketProjector} as rounds complete — rather than being self-derived from the
+     * player's own group scores ({@see predictsKnockoutBracket()}). True for both the phased and
+     * rolling strategies: players predict the real match-ups, with no cascade and no thirds ordering.
+     */
+    public function predictsOfficialBracket(): bool
+    {
+        return ! $this->predictsKnockoutBracket();
     }
 
     /**

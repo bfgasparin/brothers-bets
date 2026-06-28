@@ -532,6 +532,12 @@ export interface PredictGroupFixture {
     home_goals: number | null;
     away_goals: number | null;
     kicks_off_at: string | null;
+    /**
+     * ISO 8601 instant this match's prediction window closes. For a rolling (per-match) pool this is
+     * the match's own kickoff; otherwise the single pool-level group lock. The wizard ticks its own
+     * clock against this so a match disables the moment it locks, with no reload.
+     */
+    predictions_lock_at: string | null;
     venue: string | null;
     venue_timezone: string | null;
 }
@@ -568,6 +574,12 @@ export interface KnockoutPredictionFixture {
     home_goals: number | null;
     away_goals: number | null;
     advancing_team_id: number | null;
+    kicks_off_at: string | null;
+    /**
+     * ISO 8601 instant this match's prediction window closes — its own kickoff for a rolling pool,
+     * null otherwise (those pools gate the whole round via {@link PredictBracketPhase.window}).
+     */
+    predictions_lock_at: string | null;
 }
 
 /**

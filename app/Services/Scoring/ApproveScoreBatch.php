@@ -43,7 +43,8 @@ class ApproveScoreBatch
         // projection below reloads and mutates the underlying phase/fixture relations.
         $windowsBefore = [];
         foreach ($pools as $pool) {
-            if ($pool->usesPhasedPredictionWindows()) {
+            // Phased and rolling pools both open knockout rounds as participants are projected.
+            if ($pool->predictsOfficialBracket()) {
                 $windowsBefore[$pool->id] = $this->windowResolver->windows($pool);
             }
         }

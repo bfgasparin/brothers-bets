@@ -601,7 +601,9 @@ class SimulateTournament extends Command
                 // Phased pools predict this round now its official participants are known (projected
                 // after the previous phase), before its results are filled and scored below.
                 foreach ($tournament->pools as $pool) {
-                    if ($pool->usesPhasedPredictionWindows()) {
+                    // Both phased and rolling pools predict each knockout round against its official
+                    // participants once projected (rolling just locks per fixture rather than per round).
+                    if ($pool->predictsOfficialBracket()) {
                         $this->generatePhasedKnockoutPredictions($phase, $pool);
                     }
                 }

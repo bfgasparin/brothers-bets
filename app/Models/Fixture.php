@@ -243,6 +243,29 @@ class Fixture extends Model
     }
 
     /**
+     * The instant this match's own prediction window closes. Rolling Predictions pools lock each
+     * match at its kickoff — the prediction is the only one that gates per fixture, so the cutoff
+     * is simply {@see $kicks_off_at} (no buffer). Null when no kickoff is scheduled, so callers
+     * fail closed. This is strategy-agnostic; only a {@see Pool::usesPerMatchPredictionWindows()}
+     * pool consults it, via {@see PredictionWindowResolver::statusForFixture()}.
+     */
+    public function predictionsLockAt(): ?CarbonInterface
+    {
+        return $this->kicks_off_at;
+    }
+
+    /**
+     * Whether this match still accepts prediction edits — true only before its kickoff. A match
+     * with no scheduled kickoff is treated as closed (fail closed).
+     */
+    public function acceptsPredictions(): bool
+    {
+        $lock = $this->predictionsLockAt();
+
+        return $lock !== null && now()->lessThan($lock);
+    }
+
+    /**
      * Whether the match is over and therefore eligible for an official score.
      *
      * An admin who ended the live match (live scoreboard {@see LiveStatus::Ended})

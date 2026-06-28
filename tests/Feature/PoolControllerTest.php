@@ -55,7 +55,7 @@ class PoolControllerTest extends TestCase
                 ->has('pools.data', 3)
                 ->where('pools.data.0.slug', 'world-cup-2026-ffa')
                 ->where('pools.data.1.slug', 'world-cup-2026-brothers')
-                ->where('pools.data.2.slug', 'world-cup-2026-rolling')
+                ->where('pools.data.2.slug', 'world-cup-2026-brothers-2')
                 // All pools are played over the one tournament, so each carries its shared
                 // identity plus a stable, distinct accent position used to tell them apart.
                 ->where('pools.data.0.tournament.name', 'World Cup 2026')

@@ -26,7 +26,7 @@ class AddRollingPoolSeeder extends Seeder
         }
 
         Pool::updateOrCreate(
-            ['slug' => 'world-cup-2026-rolling'],
+            ['slug' => 'world-cup-2026-brothers-2'],
             WorldCup2026Seeder::rollingPoolAttributes($tournament->id),
         );
     }

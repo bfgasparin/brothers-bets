@@ -364,7 +364,7 @@ class WorldCup2026Seeder extends Seeder
         // {@see rollingPoolAttributes()} so the targeted production seeder (AddRollingPoolSeeder) can
         // add this exact pool without re-running the whole seeder.
         Pool::updateOrCreate(
-            ['slug' => 'world-cup-2026-rolling'],
+            ['slug' => 'world-cup-2026-brothers-2'],
             self::rollingPoolAttributes($tournament->id),
         );
     }

@@ -306,7 +306,7 @@ class WorldCup2026SeederTest extends TestCase
         $this->seed(WorldCup2026Seeder::class);
 
         $tournament = Tournament::where('slug', 'world-cup-2026')->firstOrFail();
-        $pool = Pool::where('slug', 'world-cup-2026-rolling')->firstOrFail();
+        $pool = Pool::where('slug', 'world-cup-2026-brothers-2')->firstOrFail();
 
         $this->assertTrue($pool->tournament->is($tournament));
         $this->assertSame('Bolão dos Brothers 2 - Copa', $pool->name);

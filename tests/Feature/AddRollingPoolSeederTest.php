@@ -26,12 +26,12 @@ class AddRollingPoolSeederTest extends TestCase
     {
         $this->seed(WorldCup2026Seeder::class);
         // Simulate production seeded BEFORE this change: the rolling pool doesn't exist yet.
-        Pool::where('slug', 'world-cup-2026-rolling')->delete();
+        Pool::where('slug', 'world-cup-2026-brothers-2')->delete();
         $this->assertSame(2, Pool::count());
 
         $this->seed(AddRollingPoolSeeder::class);
 
-        $pool = Pool::where('slug', 'world-cup-2026-rolling')->firstOrFail();
+        $pool = Pool::where('slug', 'world-cup-2026-brothers-2')->firstOrFail();
         $this->assertSame(ScoringStrategy::RollingBracket, $pool->scoring_strategy);
         $this->assertSame('Bolão dos Brothers 2 - Copa', $pool->name);
         $this->assertSame('30.00', $pool->entry_price);
@@ -58,7 +58,7 @@ class AddRollingPoolSeederTest extends TestCase
         $this->seed(AddRollingPoolSeeder::class);
 
         // Exactly one rolling pool, no duplicates, no extra pools.
-        $this->assertSame(1, Pool::where('slug', 'world-cup-2026-rolling')->count());
+        $this->assertSame(1, Pool::where('slug', 'world-cup-2026-brothers-2')->count());
         $this->assertSame(3, Pool::count());
         // The tuned pool, the reschedule, and the entry all survive untouched.
         $this->assertSame('99.99', $ffa->fresh()->entry_price);

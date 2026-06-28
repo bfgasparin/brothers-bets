@@ -18,7 +18,8 @@ class ScoringRulesFactory
     {
         return match ($strategy) {
             ScoringStrategy::UpfrontBracket => app(UpfrontBracketRules::class),
-            ScoringStrategy::PhasedBracket => app(PhasedBracketRules::class),
+            // Rolling Predictions locks per match but scores exactly like the phased pool.
+            ScoringStrategy::PhasedBracket, ScoringStrategy::RollingBracket => app(PhasedBracketRules::class),
         };
     }
 }

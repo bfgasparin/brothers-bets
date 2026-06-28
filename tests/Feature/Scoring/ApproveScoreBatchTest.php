@@ -150,6 +150,40 @@ class ApproveScoreBatchTest extends TestCase
         Notification::assertNotSentTo($this->entry->user, PredictionWindowOpenedNotification::class);
     }
 
+    public function test_opening_a_rolling_knockout_window_emails_every_entrant(): void
+    {
+        Notification::fake();
+
+        $rolling = Pool::factory()->rollingBracket()->create([
+            'tournament_id' => $this->tournament->id,
+            'slug' => 'rolling-extra',
+        ]);
+        $entrants = [];
+        foreach (range(1, 2) as $ignored) {
+            $user = User::factory()->create();
+            Entry::factory()->for($rolling)->for($user)->create();
+            $entrants[] = $user;
+        }
+        $this->openRoundOf32After();
+
+        $batch = $this->openBatch();
+        $this->proposeAllGroupResults($batch);
+        $this->resolveProjectedTies($this->tournament, $batch);
+
+        $this->actingAs($this->admin())->post(route('manage.scores.approve', $this->tournament));
+
+        // A rolling pool opens each knockout round when its participants are projected (matches lock
+        // per fixture, but the round opens together), so it emails exactly like a phased pool.
+        foreach ($entrants as $user) {
+            Notification::assertSentTo(
+                $user,
+                PredictionWindowOpenedNotification::class,
+                fn (PredictionWindowOpenedNotification $notification): bool => $notification->phaseKey === PhaseKey::RoundOf32
+                    && $notification->poolSlug === $rolling->slug,
+            );
+        }
+    }
+
     public function test_a_phased_window_email_is_not_resent_when_a_correction_is_approved(): void
     {
         Notification::fake();

@@ -358,6 +358,67 @@ class WorldCup2026Seeder extends Seeder
                 ],
             ],
         );
+
+        // A rolling ("Rolling Predictions") pool over the same tournament: every match is predicted
+        // on its own clock, staying open until its kickoff. Its attributes live in
+        // {@see rollingPoolAttributes()} so the targeted production seeder (AddRollingPoolSeeder) can
+        // add this exact pool without re-running the whole seeder.
+        Pool::updateOrCreate(
+            ['slug' => 'world-cup-2026-rolling'],
+            self::rollingPoolAttributes($tournament->id),
+        );
+    }
+
+    /**
+     * The attribute payload for the Rolling Predictions pool (everything but its slug). Scores
+     * exactly like the phased pool (scoreline tiers, rising round multipliers, advancing bonus) —
+     * only the per-match lock differs — so its scoring_config matches the phased pool's verbatim;
+     * kept in sync with {@see PoolFactory::rollingBracket()}. Shared with {@see AddRollingPoolSeeder}.
+     *
+     * @return array<string, mixed>
+     */
+    public static function rollingPoolAttributes(int $tournamentId): array
+    {
+        return [
+            'tournament_id' => $tournamentId,
+            'name' => 'Bolão dos Brothers 2 - Copa',
+            'source' => 'Bruno Gasparin',
+            'accent' => PoolAccent::Violet,
+            'scoring_strategy' => ScoringStrategy::RollingBracket,
+            'scoring_config' => [
+                'group' => [
+                    'exact_score' => 20,
+                    'winner_and_one_team_exact_goals' => 15,
+                    'correct_outcome_wrong_goals' => 10,
+                    'one_team_exact_goals_wrong_outcome' => 5,
+                ],
+                'knockout' => [
+                    'exact_score' => 20,
+                    'winner_and_one_team_exact_goals' => 15,
+                    'correct_outcome_wrong_goals' => 10,
+                    'one_team_exact_goals_wrong_outcome' => 5,
+                    'advancing_team' => 10,
+                    'round_multipliers' => [
+                        'round_of_32' => 1,
+                        'round_of_16' => 2,
+                        'quarter_finals' => 4,
+                        'semi_finals' => 6,
+                        'third_place' => 4,
+                        'final' => 8,
+                    ],
+                ],
+            ],
+            // No override: each match locks at its own kickoff, so there is no single pool lock.
+            'predictions_lock_at' => null,
+            'entry_price' => 30.00,
+            'currency' => 'BRL',
+            'house_fee_percentage' => 0.00,
+            'prize_structure' => [
+                ['place' => 1, 'percentage' => 50],
+                ['place' => 2, 'percentage' => 30],
+                ['place' => 3, 'percentage' => 20],
+            ],
+        ];
     }
 
     /**

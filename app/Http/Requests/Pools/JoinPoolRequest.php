@@ -19,7 +19,7 @@ class JoinPoolRequest extends FormRequest
 
     public function authorize(): bool
     {
-        return $this->user() !== null && $this->pool()->acceptsPredictions();
+        return $this->user() !== null && $this->pool()->acceptsJoins();
     }
 
     /**

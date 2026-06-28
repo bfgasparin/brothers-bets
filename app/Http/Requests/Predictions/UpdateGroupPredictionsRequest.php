@@ -20,4 +20,17 @@ class UpdateGroupPredictionsRequest extends PredictionRequest
             'predictions.*.away_goals' => ['required', 'integer', 'min:0', 'max:99'],
         ];
     }
+
+    /**
+     * The validated group predictions to persist — for a per-match pool, only those whose match is
+     * still open (others gate the whole stage at once, so all are kept).
+     *
+     * @return list<array{fixture_id: int, home_goals: int, away_goals: int}>
+     */
+    public function predictionsForPersistence(): array
+    {
+        $fixturesById = $this->pool()->tournament->groupFixtures()->with('phase')->get()->keyBy('id');
+
+        return $this->openPredictions($this->validated('predictions'), $fixturesById);
+    }
 }

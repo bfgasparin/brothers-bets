@@ -27,7 +27,7 @@ class WorldCup2026SeederTest extends TestCase
 
         $this->assertSame('World Cup 2026', $tournament->name);
         $this->assertSame(7, $tournament->phases()->count());
-        $this->assertSame(2, $tournament->pools()->count());
+        $this->assertSame(3, $tournament->pools()->count());
         $this->assertSame(12, $tournament->groups()->count());
         $this->assertSame(48, Team::count());
         $this->assertSame(104, $tournament->fixtures()->count());
@@ -301,14 +301,34 @@ class WorldCup2026SeederTest extends TestCase
         );
     }
 
-    public function test_the_two_seeded_pools_get_distinct_accents(): void
+    public function test_it_seeds_the_rolling_per_match_pool(): void
+    {
+        $this->seed(WorldCup2026Seeder::class);
+
+        $tournament = Tournament::where('slug', 'world-cup-2026')->firstOrFail();
+        $pool = Pool::where('slug', 'world-cup-2026-rolling')->firstOrFail();
+
+        $this->assertTrue($pool->tournament->is($tournament));
+        $this->assertSame('Bolão dos Brothers 2 - Copa', $pool->name);
+        $this->assertSame(PoolAccent::Violet, $pool->accent);
+        $this->assertSame(ScoringStrategy::RollingBracket, $pool->scoring_strategy);
+        $this->assertTrue($pool->usesPerMatchPredictionWindows());
+        // Scores identically to the phased pool — same scoring_config.
+        $this->assertSame(20, $pool->scoring_config['knockout']['exact_score']);
+        $this->assertSame(10, $pool->scoring_config['knockout']['advancing_team']);
+        $this->assertSame(8, $pool->scoring_config['knockout']['round_multipliers']['final']);
+        // No single lock: each match locks at its own kickoff.
+        $this->assertNull($pool->predictions_lock_at);
+    }
+
+    public function test_the_seeded_pools_get_distinct_accents(): void
     {
         $this->seed(WorldCup2026Seeder::class);
 
         $accents = Pool::pluck('accent');
 
         // Sibling pools over the one tournament must read as distinct, so their accents differ.
-        $this->assertCount(2, $accents->unique());
+        $this->assertCount(3, $accents->unique());
     }
 
     public function test_it_is_idempotent(): void
@@ -317,7 +337,7 @@ class WorldCup2026SeederTest extends TestCase
         $this->seed(WorldCup2026Seeder::class);
 
         $this->assertSame(1, Tournament::count());
-        $this->assertSame(2, Pool::count());
+        $this->assertSame(3, Pool::count());
         $this->assertSame(48, Team::count());
         $this->assertSame(104, Fixture::count());
         $this->assertSame(48, \DB::table('group_team')->count());

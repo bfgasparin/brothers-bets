@@ -29,4 +29,16 @@ class ScoringRulesFactoryTest extends TestCase
             $factory->make(ScoringStrategy::PhasedBracket),
         );
     }
+
+    public function test_it_scores_the_rolling_bracket_with_the_phased_rules(): void
+    {
+        $factory = new ScoringRulesFactory;
+
+        // Rolling Predictions locks per match but scores identically to the phased pool:
+        // scoreline tiers, rising round multipliers, and the flat advancing bonus.
+        $this->assertInstanceOf(
+            PhasedBracketRules::class,
+            $factory->make(ScoringStrategy::RollingBracket),
+        );
+    }
 }

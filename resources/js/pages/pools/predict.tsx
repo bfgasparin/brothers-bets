@@ -68,6 +68,35 @@ const AUTOSAVE_DELAY = 700;
 /** A stable empty set so the frozen-set lookup never allocates on a miss. */
 const EMPTY_ID_SET: ReadonlySet<number> = new Set<number>();
 
+/** How often the rolling wizard re-checks the clock, so a match disables as it kicks off. */
+const ROLLING_TICK_MS = 15_000;
+
+/** Whether a fixture's own prediction window is still open at `now` (its kickoff hasn't passed). */
+function lockOpen(lockIso: string | null, now: number): boolean {
+    return lockIso !== null && now < Date.parse(lockIso);
+}
+
+/**
+ * A ticking clock for rolling (per-match) pools, so each match disables the instant its kickoff
+ * passes without a reload. Stays still (one initial read) for the other strategies, which lock the
+ * whole pool/round at once and so never change mid-session.
+ */
+function useNow(active: boolean): number {
+    const [now, setNow] = useState(() => Date.now());
+
+    useEffect(() => {
+        if (!active) {
+            return;
+        }
+
+        const id = setInterval(() => setNow(Date.now()), ROLLING_TICK_MS);
+
+        return () => clearInterval(id);
+    }, [active]);
+
+    return now;
+}
+
 /** The knockout phase keys that make up a wizard step (empty for the group step). */
 function stepPhaseKeys(step: number): string[] {
     return step === 0 ? [] : KNOCKOUT_STEPS[step - 1].phaseKeys;
@@ -396,6 +425,7 @@ function GroupCard({
     group,
     scores,
     canEdit,
+    fixtureEditable,
     dimCompleted,
     onChange,
     onCommit,
@@ -405,6 +435,11 @@ function GroupCard({
     group: PredictGroup;
     scores: GroupScores;
     canEdit: boolean;
+    /**
+     * Per-fixture editability for a rolling pool (each match locks at its own kickoff). When omitted
+     * the whole group rides `canEdit` (the other strategies lock the stage at once).
+     */
+    fixtureEditable?: (fixture: PredictGroupFixture) => boolean;
     /** When true (the filter is on), de-emphasise rows that are already complete. */
     dimCompleted: boolean;
     onChange: (fixtureId: number, side: 'home' | 'away', value: string) => void;
@@ -452,6 +487,9 @@ function GroupCard({
                         home: '',
                         away: '',
                     };
+                    const editable = fixtureEditable
+                        ? fixtureEditable(fixture)
+                        : canEdit;
 
                     return (
                         <div
@@ -485,7 +523,7 @@ function GroupCard({
                                 <div className="flex items-center gap-1 sm:gap-1.5">
                                     <ScoreStepper
                                         value={score.home}
-                                        disabled={!canEdit}
+                                        disabled={!editable}
                                         label={t(':team goals', {
                                             team: teamName(
                                                 fixture.home,
@@ -507,7 +545,7 @@ function GroupCard({
                                     </span>
                                     <ScoreStepper
                                         value={score.away}
-                                        disabled={!canEdit}
+                                        disabled={!editable}
                                         label={t(':team goals', {
                                             team: teamName(
                                                 fixture.away,
@@ -810,8 +848,30 @@ export default function Predict({
     completion,
 }: PredictPageProps) {
     const { t } = useTranslation();
-    const canEdit = pool.can_edit;
     const isUpfront = pool.scoring_strategy === 'upfront-bracket';
+    // Rolling (per-match) pools lock each match at its own kickoff, so editability is time-varying
+    // within the session: a ticking clock re-evaluates each fixture's window as kickoffs pass.
+    const isRolling = pool.scoring_strategy === 'rolling-bracket';
+    const now = useNow(isRolling);
+    // The group step is editable while ANY group match is still open (rolling), else the single
+    // pool-level lock. Per-fixture disabling below handles individual matches that have locked.
+    const canEdit = isRolling
+        ? groups.some((group) =>
+              group.fixtures.some((fixture) =>
+                  lockOpen(fixture.predictions_lock_at, now),
+              ),
+          )
+        : pool.can_edit;
+    // Per-fixture editability for a rolling pool (each match locks at its own kickoff); undefined for
+    // the other strategies, which gate a whole group/round at once via `canEdit`/the phase window.
+    const groupFixtureEditable = isRolling
+        ? (fixture: PredictGroupFixture): boolean =>
+              lockOpen(fixture.predictions_lock_at, now)
+        : undefined;
+    const knockoutFixtureEditable = isRolling
+        ? (fixture: KnockoutPredictionFixture): boolean =>
+              lockOpen(fixture.predictions_lock_at, now)
+        : undefined;
     const [saveStatus, setSaveStatus] = useState<SaveStatusValue>('idle');
     const [importOpen, setImportOpen] = useState(false);
     // Celebrate the moment the last open-window prediction lands. A ref of the previous value tells
@@ -1001,6 +1061,10 @@ export default function Predict({
         url: string;
         predictions: Array<Record<string, number | null>>;
     } {
+        // For a rolling pool, never send a match that has locked since the user last typed — the
+        // server drops it anyway, but filtering here keeps the auto-save payload honest.
+        const tick = Date.now();
+
         if (stepRef.current === 0) {
             const predictions = groupsRef.current
                 .flatMap((group) => group.fixtures)
@@ -1009,8 +1073,12 @@ export default function Predict({
                     score: groupScoresRef.current[fixture.fixture_id],
                 }))
                 .filter(
-                    ({ score }) =>
-                        score && score.home !== '' && score.away !== '',
+                    ({ fixture, score }) =>
+                        score &&
+                        score.home !== '' &&
+                        score.away !== '' &&
+                        (!isRolling ||
+                            lockOpen(fixture.predictions_lock_at, tick)),
                 )
                 .map(({ fixture, score }) => ({
                     fixture_id: fixture.fixture_id,
@@ -1028,6 +1096,11 @@ export default function Predict({
         );
         const predictions = phaseKeys
             .flatMap((key) => phasesByKeyRef.current[key]?.fixtures ?? [])
+            // A rolling round can hold matches that have already locked; drop those.
+            .filter(
+                (fixture) =>
+                    !isRolling || lockOpen(fixture.predictions_lock_at, tick),
+            )
             .map((fixture) => {
                 const pick = picksRef.current[fixture.fixture_id] ?? {
                     home: '',
@@ -1458,6 +1531,9 @@ export default function Predict({
                                             group={group}
                                             scores={groupScores}
                                             canEdit={canEdit}
+                                            fixtureEditable={
+                                                groupFixtureEditable
+                                            }
                                             dimCompleted={onlyRemaining}
                                             onChange={updateGroupScore}
                                             onCommit={flush}
@@ -1515,6 +1591,7 @@ export default function Predict({
                                     }
                                     phasesByKey={phasesByKey}
                                     picks={picks}
+                                    fixtureEditable={knockoutFixtureEditable}
                                     dimCompleted={onlyRemaining}
                                     fixtureFilter={
                                         onlyRemaining
@@ -1638,6 +1715,7 @@ function KnockoutStep({
     phaseKeys,
     phasesByKey,
     picks,
+    fixtureEditable,
     dimCompleted,
     fixtureFilter,
     onChange,
@@ -1646,6 +1724,11 @@ function KnockoutStep({
     phaseKeys: string[];
     phasesByKey: Record<string, PredictBracketPhase>;
     picks: KnockoutPicks;
+    /**
+     * Per-fixture editability for a rolling pool (each match locks at its own kickoff), narrowing the
+     * round's open window. When omitted the whole round rides its phase window.
+     */
+    fixtureEditable?: (fixture: KnockoutPredictionFixture) => boolean;
     /** When true (the filter is on), de-emphasise cards whose pick is already complete. */
     dimCompleted: boolean;
     /** When set, only fixtures it keeps are shown (the "needs my prediction" filter). */
@@ -1705,7 +1788,12 @@ function KnockoutStep({
                                                 advancing: null,
                                             }
                                         }
-                                        canEdit={phaseEditable}
+                                        canEdit={
+                                            phaseEditable &&
+                                            (fixtureEditable
+                                                ? fixtureEditable(fixture)
+                                                : true)
+                                        }
                                         isFinal={fixture.phase_key === 'final'}
                                         dimCompleted={dimCompleted}
                                         onChange={(patch, immediate) =>

@@ -75,29 +75,54 @@ class PoolFactory extends Factory
     {
         return $this->state(fn (): array => [
             'scoring_strategy' => ScoringStrategy::PhasedBracket,
-            'scoring_config' => [
-                'group' => [
-                    'exact_score' => 20,
-                    'winner_and_one_team_exact_goals' => 15,
-                    'correct_outcome_wrong_goals' => 10,
-                    'one_team_exact_goals_wrong_outcome' => 5,
-                ],
-                'knockout' => [
-                    'exact_score' => 20,
-                    'winner_and_one_team_exact_goals' => 15,
-                    'correct_outcome_wrong_goals' => 10,
-                    'one_team_exact_goals_wrong_outcome' => 5,
-                    'advancing_team' => 10,
-                    'round_multipliers' => [
-                        'round_of_32' => 1,
-                        'round_of_16' => 2,
-                        'quarter_finals' => 4,
-                        'semi_finals' => 6,
-                        'third_place' => 4,
-                        'final' => 8,
-                    ],
+            'scoring_config' => self::phasedScoringConfig(),
+        ]);
+    }
+
+    /**
+     * The rolling ("per-match") strategy: every match is predicted on its own clock, staying open
+     * until its kickoff. Scoring is identical to the phased pool (scoreline tiers, rising round
+     * multipliers, advancing bonus), so its scoring_config matches {@see phasedBracket()} verbatim;
+     * only the per-fixture lock differs. Kept in sync with the rolling pool in {@see WorldCup2026Seeder}.
+     */
+    public function rollingBracket(): static
+    {
+        return $this->state(fn (): array => [
+            'scoring_strategy' => ScoringStrategy::RollingBracket,
+            'scoring_config' => self::phasedScoringConfig(),
+        ]);
+    }
+
+    /**
+     * The scoring_config shared by the phased and rolling strategies. Duplicated verbatim in
+     * {@see WorldCup2026Seeder} for the corresponding seeded pools — keep them in sync.
+     *
+     * @return array<string, mixed>
+     */
+    private static function phasedScoringConfig(): array
+    {
+        return [
+            'group' => [
+                'exact_score' => 20,
+                'winner_and_one_team_exact_goals' => 15,
+                'correct_outcome_wrong_goals' => 10,
+                'one_team_exact_goals_wrong_outcome' => 5,
+            ],
+            'knockout' => [
+                'exact_score' => 20,
+                'winner_and_one_team_exact_goals' => 15,
+                'correct_outcome_wrong_goals' => 10,
+                'one_team_exact_goals_wrong_outcome' => 5,
+                'advancing_team' => 10,
+                'round_multipliers' => [
+                    'round_of_32' => 1,
+                    'round_of_16' => 2,
+                    'quarter_finals' => 4,
+                    'semi_finals' => 6,
+                    'third_place' => 4,
+                    'final' => 8,
                 ],
             ],
-        ]);
+        ];
     }
 }

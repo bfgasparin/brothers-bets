@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\FixtureStatus;
 use App\Enums\PhaseType;
 use App\Enums\ScoringStrategy;
 use App\Http\Requests\Tournaments\RescheduleFixtureRequest;
@@ -113,7 +114,21 @@ class FixtureScheduleController extends Controller
             }
         }
 
-        return $ids;
+        // A rolling (per-match) pool locks every match at its own kickoff, so rescheduling ANY
+        // not-yet-finished fixture moves that match's prediction window — every one governs a lock.
+        $hasRollingPool = $tournament->pools()
+            ->where('scoring_strategy', ScoringStrategy::RollingBracket->value)
+            ->exists();
+
+        if ($hasRollingPool) {
+            $ids = array_merge($ids, $tournament->fixtures()
+                ->where('status', '!=', FixtureStatus::Finished->value)
+                ->pluck('id')
+                ->map(fn ($id): int => (int) $id)
+                ->all());
+        }
+
+        return array_values(array_unique($ids));
     }
 
     /**

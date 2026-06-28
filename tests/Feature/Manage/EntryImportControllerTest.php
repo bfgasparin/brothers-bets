@@ -56,12 +56,12 @@ class EntryImportControllerTest extends TestCase
 
     public function test_the_create_screen_lists_all_pools(): void
     {
-        // Both the upfront and the phased pool of the tournament are offered.
+        // The upfront, phased, and rolling pools of the tournament are all offered.
         $this->actingAs($this->admin())
             ->get(route('manage.backfill.create', $this->tournament))
             ->assertInertia(fn (AssertableInertia $page) => $page
                 ->component('manage/backfill')
-                ->has('pools', 2)
+                ->has('pools', 3)
                 ->has('pools.0.scoring_label')
                 ->has('users')
                 ->has('users.0.avatar')
